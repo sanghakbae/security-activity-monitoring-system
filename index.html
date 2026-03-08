@@ -2,24 +2,25 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/security-activity-monitoring-system/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>보안 활동 모니터링 시스템</title>
 
     <script>
       (function () {
-        var params = new URLSearchParams(window.location.search);
-        var p = params.get('p');
+        const params = new URLSearchParams(window.location.search);
+        const p = params.get("p");
 
         if (p) {
-          var newUrl = window.location.origin + '/' + p + window.location.hash;
-          window.history.replaceState(null, '', newUrl);
+          const newUrl = "/" + p + window.location.hash;
+          window.history.replaceState(null, "", newUrl);
         }
       })();
     </script>
   </head>
+
   <body>
     <div id="root"></div>
-    <script type="module" src="/security-activity-monitoring-system/src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
