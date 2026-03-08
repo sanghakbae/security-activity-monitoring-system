@@ -7,7 +7,8 @@ export type ActivityStatus = '예약' | '진행중' | '완료' | '지연';
 export type ActivityMaster = {
   id: string;
   name: string;
-  department: string;
+  ownerDepartment: string;
+  partnerDepartment: string | null;
   frequency: ActivityFrequency;
   purpose: string;
   guide: string;
@@ -17,7 +18,8 @@ export type ActivityMaster = {
 export type ExecutionRecord = {
   id: string;
   activityMasterId?: string;
-  department: string;
+  ownerDepartment: string;
+  partnerDepartment: string | null;
   frequencyLabel: string;
   title: string;
   description: string;
@@ -43,7 +45,8 @@ export type DashboardTask = {
   title: string;
   dueDate: string;
   status: ActivityStatus;
-  department: string;
+  ownerDepartment: string;
+  partnerDepartment: string | null;
 };
 
 export type MenuItem = {

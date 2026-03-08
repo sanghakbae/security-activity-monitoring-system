@@ -1,43 +1,70 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import autoTable from 'jspdf-autotable';
 import type { ExecutionEvidenceFile, ExecutionRecord } from '@/types';
 
-type GenerateReportParams = {
-  reportType: 'quarter' | 'half' | 'year';
+type ReportType = 'quarter' | 'half' | 'year';
+
+type GenerateSecurityReportPdfParams = {
+  reportType: ReportType;
   year: number;
-  quarter: number;
-  half: number;
+  quarter?: number;
+  half?: number;
   records: ExecutionRecord[];
   evidenceFilesByRecord: Record<string, ExecutionEvidenceFile[]>;
 };
 
-function getReportTitle(
-  reportType: 'quarter' | 'half' | 'year',
+function formatDepartmentLabel(
+  ownerDepartment: string,
+  partnerDepartment: string | null,
+) {
+  if (partnerDepartment && partnerDepartment.trim() !== '') {
+    return `${ownerDepartment} · ${partnerDepartment}`;
+  }
+
+  return ownerDepartment;
+}
+
+function getReportPeriodLabel(
+  reportType: ReportType,
   year: number,
-  quarter: number,
-  half: number,
+  quarter?: number,
+  half?: number,
 ) {
   if (reportType === 'quarter') {
-    return `${year}년 ${quarter}분기 보안 활동 리포트`;
+    return `${year}년 ${quarter}분기`;
   }
 
   if (reportType === 'half') {
-    return `${year}년 ${half === 1 ? '상반기' : '하반기'} 보안 활동 리포트`;
+    return `${year}년 ${half === 1 ? '상반기' : '하반기'}`;
   }
 
-  return `${year}년 연간 보안 활동 리포트`;
+  return `${year}년 연간`;
 }
 
-function isImageFile(fileName: string) {
-  const lower = fileName.toLowerCase();
-  return (
-    lower.endsWith('.png') ||
-    lower.endsWith('.jpg') ||
-    lower.endsWith('.jpeg') ||
-    lower.endsWith('.gif') ||
-    lower.endsWith('.webp') ||
-    lower.endsWith('.bmp')
-  );
+function getStatusLabel(status: ExecutionRecord['status']) {
+  switch (status) {
+    case '완료':
+      return '완료';
+    case '지연':
+      return '지연';
+    case '진행중':
+      return '진행중';
+    case '예약':
+    default:
+      return '예정';
+  }
+}
+
+async function loadImageDataUrl(url: string) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 export async function generateSecurityReportPdf({
@@ -47,202 +74,162 @@ export async function generateSecurityReportPdf({
   half,
   records,
   evidenceFilesByRecord,
-}: GenerateReportParams) {
-  const title = getReportTitle(reportType, year, quarter, half);
-
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.left = '-99999px';
-  container.style.top = '0';
-  container.style.width = '1000px';
-  container.style.background = '#ffffff';
-  container.style.padding = '32px';
-  container.style.color = '#111827';
-  container.style.fontFamily =
-    `'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', Arial, sans-serif`;
-  container.style.boxSizing = 'border-box';
-
-  const header = document.createElement('div');
-  header.style.marginBottom = '24px';
-
-  const titleEl = document.createElement('h1');
-  titleEl.textContent = title;
-  titleEl.style.fontSize = '28px';
-  titleEl.style.fontWeight = '700';
-  titleEl.style.margin = '0 0 12px 0';
-
-  const dateEl = document.createElement('div');
-  dateEl.textContent = `생성일시: ${new Date().toLocaleString()}`;
-  dateEl.style.fontSize = '14px';
-  dateEl.style.color = '#475569';
-
-  header.appendChild(titleEl);
-  header.appendChild(dateEl);
-  container.appendChild(header);
-
-  if (records.length === 0) {
-    const empty = document.createElement('div');
-    empty.textContent = '해당 조건의 보안 활동 데이터가 없습니다.';
-    empty.style.fontSize = '16px';
-    empty.style.padding = '20px 0';
-    container.appendChild(empty);
-  }
-
-  for (const record of records) {
-    const card = document.createElement('div');
-    card.style.border = '1px solid #cbd5e1';
-    card.style.borderRadius = '16px';
-    card.style.padding = '20px';
-    card.style.marginBottom = '24px';
-    card.style.pageBreakInside = 'avoid';
-
-    const name = document.createElement('div');
-    name.textContent = record.title;
-    name.style.fontSize = '24px';
-    name.style.fontWeight = '700';
-    name.style.marginBottom = '12px';
-
-    const meta = document.createElement('div');
-    meta.style.fontSize = '15px';
-    meta.style.lineHeight = '1.9';
-    meta.innerHTML = `
-      <div>부서: ${record.department}</div>
-      <div>주기: ${record.frequencyLabel}</div>
-      <div>기한: ${record.dueDate.slice(0, 10)}</div>
-      <div>상태: ${record.status}</div>
-    `;
-
-    const noteTitle = document.createElement('div');
-    noteTitle.textContent = '수행 내역';
-    noteTitle.style.fontSize = '16px';
-    noteTitle.style.fontWeight = '700';
-    noteTitle.style.marginTop = '16px';
-    noteTitle.style.marginBottom = '8px';
-
-    const noteBox = document.createElement('div');
-    noteBox.textContent = record.executionNote || '-';
-    noteBox.style.border = '1px solid #e2e8f0';
-    noteBox.style.borderRadius = '12px';
-    noteBox.style.background = '#f8fafc';
-    noteBox.style.padding = '12px';
-    noteBox.style.fontSize = '14px';
-    noteBox.style.lineHeight = '1.8';
-    noteBox.style.whiteSpace = 'pre-wrap';
-
-    card.appendChild(name);
-    card.appendChild(meta);
-    card.appendChild(noteTitle);
-    card.appendChild(noteBox);
-
-    const evidences = evidenceFilesByRecord[record.id] ?? [];
-
-    if (evidences.length > 0) {
-      const evidenceTitle = document.createElement('div');
-      evidenceTitle.textContent = '증적자료';
-      evidenceTitle.style.fontSize = '16px';
-      evidenceTitle.style.fontWeight = '700';
-      evidenceTitle.style.marginTop = '18px';
-      evidenceTitle.style.marginBottom = '10px';
-      card.appendChild(evidenceTitle);
-
-      const grid = document.createElement('div');
-      grid.style.display = 'grid';
-      grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
-      grid.style.gap = '16px';
-
-      for (const evidence of evidences) {
-        const item = document.createElement('div');
-        item.style.border = '1px solid #e2e8f0';
-        item.style.borderRadius = '12px';
-        item.style.overflow = 'hidden';
-        item.style.background = '#ffffff';
-
-        const previewWrap = document.createElement('div');
-        previewWrap.style.height = '180px';
-        previewWrap.style.display = 'flex';
-        previewWrap.style.alignItems = 'center';
-        previewWrap.style.justifyContent = 'center';
-        previewWrap.style.background = '#f8fafc';
-
-        if (evidence.thumbnailUrl && isImageFile(evidence.fileName)) {
-          const img = document.createElement('img');
-          img.src = evidence.thumbnailUrl;
-          img.alt = evidence.fileName;
-          img.crossOrigin = 'anonymous';
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = 'cover';
-          previewWrap.appendChild(img);
-        } else {
-          const fallback = document.createElement('div');
-          fallback.textContent = '미리보기 없음';
-          fallback.style.fontSize = '13px';
-          fallback.style.color = '#64748b';
-          previewWrap.appendChild(fallback);
-        }
-
-        const textWrap = document.createElement('div');
-        textWrap.style.padding = '10px 12px';
-
-        const fileName = document.createElement('div');
-        fileName.textContent = evidence.fileName;
-        fileName.style.fontSize = '13px';
-        fileName.style.fontWeight = '600';
-        fileName.style.wordBreak = 'break-all';
-
-        const uploadedAt = document.createElement('div');
-        uploadedAt.textContent = `업로드: ${new Date(evidence.uploadedAt).toLocaleString()}`;
-        uploadedAt.style.fontSize = '11px';
-        uploadedAt.style.color = '#64748b';
-        uploadedAt.style.marginTop = '6px';
-
-        textWrap.appendChild(fileName);
-        textWrap.appendChild(uploadedAt);
-
-        item.appendChild(previewWrap);
-        item.appendChild(textWrap);
-        grid.appendChild(item);
-      }
-
-      card.appendChild(grid);
-    }
-
-    container.appendChild(card);
-  }
-
-  document.body.appendChild(container);
-
-  const canvas = await html2canvas(container, {
-    scale: 2,
-    useCORS: true,
-    backgroundColor: '#ffffff',
+}: GenerateSecurityReportPdfParams) {
+  const doc = new jsPDF({
+    orientation: 'p',
+    unit: 'mm',
+    format: 'a4',
   });
 
-  document.body.removeChild(container);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 14;
+  let cursorY = 18;
 
-  const imgData = canvas.toDataURL('image/png');
-  const pdf = new jsPDF('p', 'mm', 'a4');
+  const title = `보안 활동 ${getReportPeriodLabel(reportType, year, quarter, half)} 리포트`;
+  const generatedAt = new Date().toLocaleString('ko-KR');
 
-  const pdfWidth = 210;
-  const pdfHeight = 297;
-  const margin = 10;
-  const usableWidth = pdfWidth - margin * 2;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(title, marginX, cursorY);
 
-  const imgWidth = usableWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  cursorY += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`생성 일시: ${generatedAt}`, marginX, cursorY);
 
-  let remainingHeight = imgHeight;
-  let position = 0;
+  cursorY += 8;
 
-  pdf.addImage(imgData, 'PNG', margin, position + margin, imgWidth, imgHeight);
-  remainingHeight -= pdfHeight;
+  autoTable(doc, {
+    startY: cursorY,
+    head: [['활동명', '부서', '기한', '상태', '증적 수']],
+    body: records.map((record) => [
+      record.title,
+      formatDepartmentLabel(record.ownerDepartment, record.partnerDepartment),
+      record.dueDate,
+      getStatusLabel(record.status),
+      String((evidenceFilesByRecord[record.id] ?? []).length),
+    ]),
+    theme: 'grid',
+    styles: {
+      font: 'helvetica',
+      fontSize: 9,
+      cellPadding: 2.5,
+      lineColor: [220, 226, 232],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    margin: { left: marginX, right: marginX },
+  });
 
-  while (remainingHeight > 0) {
-    position = remainingHeight - imgHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, 'PNG', margin, position + margin, imgWidth, imgHeight);
-    remainingHeight -= pdfHeight;
+  cursorY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 40;
+  cursorY += 8;
+
+  for (const record of records) {
+    const evidenceFiles = evidenceFilesByRecord[record.id] ?? [];
+
+    if (cursorY > 240) {
+      doc.addPage();
+      cursorY = 18;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text(record.title, marginX, cursorY);
+    cursorY += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(
+      `부서: ${formatDepartmentLabel(record.ownerDepartment, record.partnerDepartment)}`,
+      marginX,
+      cursorY,
+    );
+    cursorY += 5;
+    doc.text(`기한: ${record.dueDate}`, marginX, cursorY);
+    cursorY += 5;
+    doc.text(`상태: ${getStatusLabel(record.status)}`, marginX, cursorY);
+    cursorY += 5;
+    doc.text(`수행 내역: ${record.executionNote?.trim() || '-'}`, marginX, cursorY);
+    cursorY += 8;
+
+    if (evidenceFiles.length === 0) {
+      doc.setTextColor(120, 120, 120);
+      doc.text('증적 없음', marginX, cursorY);
+      doc.setTextColor(0, 0, 0);
+      cursorY += 10;
+      continue;
+    }
+
+    const thumbWidth = 54;
+    const thumbHeight = 38;
+    const gap = 6;
+    const itemsPerRow = 3;
+
+    for (let i = 0; i < evidenceFiles.length; i += 1) {
+      const file = evidenceFiles[i];
+      const columnIndex = i % itemsPerRow;
+      const rowIndex = Math.floor(i / itemsPerRow);
+
+      const x = marginX + columnIndex * (thumbWidth + gap);
+      const y = cursorY + rowIndex * (thumbHeight + 14);
+
+      if (y + thumbHeight + 14 > 285) {
+        doc.addPage();
+        cursorY = 18;
+
+        const newRowIndex = 0;
+        const newY = cursorY + newRowIndex * (thumbHeight + 14);
+
+        if (file.thumbnailUrl) {
+          try {
+            const imageDataUrl = await loadImageDataUrl(file.thumbnailUrl);
+            doc.addImage(imageDataUrl, 'JPEG', x, newY, thumbWidth, thumbHeight);
+          } catch {
+            doc.rect(x, newY, thumbWidth, thumbHeight);
+            doc.setFontSize(8);
+            doc.text('미리보기 없음', x + 14, newY + 20);
+          }
+        } else {
+          doc.rect(x, newY, thumbWidth, thumbHeight);
+          doc.setFontSize(8);
+          doc.text('미리보기 없음', x + 14, newY + 20);
+        }
+
+        doc.setFontSize(8);
+        doc.text(file.fileName, x, newY + thumbHeight + 4, { maxWidth: thumbWidth });
+        continue;
+      }
+
+      if (file.thumbnailUrl) {
+        try {
+          const imageDataUrl = await loadImageDataUrl(file.thumbnailUrl);
+          doc.addImage(imageDataUrl, 'JPEG', x, y, thumbWidth, thumbHeight);
+        } catch {
+          doc.rect(x, y, thumbWidth, thumbHeight);
+          doc.setFontSize(8);
+          doc.text('미리보기 없음', x + 14, y + 20);
+        }
+      } else {
+        doc.rect(x, y, thumbWidth, thumbHeight);
+        doc.setFontSize(8);
+        doc.text('미리보기 없음', x + 14, y + 20);
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(file.fileName, x, y + thumbHeight + 4, { maxWidth: thumbWidth });
+    }
+
+    cursorY += Math.ceil(evidenceFiles.length / itemsPerRow) * (thumbHeight + 14) + 4;
   }
 
-  pdf.save(`security-report-${reportType}-${year}.pdf`);
+  const fileName = `security-report-${reportType}-${year}${quarter ? `-q${quarter}` : ''}${
+    half ? `-h${half}` : ''
+  }.pdf`;
+
+  doc.save(fileName);
 }

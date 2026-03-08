@@ -49,7 +49,7 @@ export default function Sidebar({
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[18px] font-semibold text-slate-900">
+                <div className="truncate text-[16px] font-semibold text-slate-900">
                   보안 활동 모니터링
                 </div>
               </div>

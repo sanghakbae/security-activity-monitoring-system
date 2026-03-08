@@ -18,20 +18,26 @@ function buildDashboardTasksFromRecords(records: ExecutionRecord[]): DashboardTa
         title: item.title,
         dueDate: item.dueDate,
         status: item.status,
-        department: item.department,
+        ownerDepartment: item.ownerDepartment,
+        partnerDepartment: item.partnerDepartment,
       };
     })
-    .sort((a, b) => a.month - b.month || a.title.localeCompare(b.title));
+    .sort((a, b) => {
+      const dateCompare = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return a.title.localeCompare(b.title);
+    });
 }
 
 function mapMaster(row: any): ActivityMaster {
   return {
     id: row.id,
     name: row.name,
-    department: row.department,
+    ownerDepartment: row.owner_department ?? row.department ?? '정보보호유닛',
+    partnerDepartment: row.partner_department ?? null,
     frequency: row.frequency,
-    purpose: row.purpose,
-    guide: row.guide,
+    purpose: row.purpose ?? '',
+    guide: row.guide ?? '',
     evidences: Array.isArray(row.evidences) ? row.evidences : [],
   };
 }
@@ -58,10 +64,11 @@ function mapRecord(row: any): ExecutionRecord {
   return {
     id: row.id,
     activityMasterId: row.activity_master_id ?? undefined,
-    department: row.department,
+    ownerDepartment: row.owner_department ?? row.department ?? '정보보호유닛',
+    partnerDepartment: row.partner_department ?? null,
     frequencyLabel: row.frequency_label ?? '-',
     title: row.title,
-    description: row.description,
+    description: row.description ?? '',
     dueDate: row.due_date,
     status: getComputedStatus(row),
     evidenceRequired: row.evidence_required,
@@ -69,7 +76,7 @@ function mapRecord(row: any): ExecutionRecord {
   };
 }
 
-function getScheduleDatesByFrequency(
+function getScheduleDatesForYear(
   frequency: ActivityMaster['frequency'],
   year: number,
 ): string[] {
@@ -89,6 +96,20 @@ function getScheduleDatesByFrequency(
     default:
       return [];
   }
+}
+
+function getScheduleDatesByFrequency(
+  frequency: ActivityMaster['frequency'],
+  startYear: number,
+  endYear: number,
+): string[] {
+  const scheduleDates: string[] = [];
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    scheduleDates.push(...getScheduleDatesForYear(frequency, year));
+  }
+
+  return scheduleDates;
 }
 
 export function useSecurityActivityData() {
@@ -288,9 +309,13 @@ export function useSecurityActivityData() {
     if (!query) return records;
 
     return records.filter((item) =>
-      [item.title, item.department, item.status, item.frequencyLabel].some((value) =>
-        value.toLowerCase().includes(query),
-      ),
+      [
+        item.title,
+        item.ownerDepartment,
+        item.partnerDepartment ?? '',
+        item.status,
+        item.frequencyLabel,
+      ].some((value) => value.toLowerCase().includes(query)),
     );
   }, [records, keyword]);
 
@@ -335,8 +360,11 @@ export function useSecurityActivityData() {
   const syncExecutionRecords = async (master: ActivityMaster) => {
     if (!supabase) return;
 
-    const year = new Date().getFullYear();
-    const scheduleDates = getScheduleDatesByFrequency(master.frequency, year);
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 1;
+    const endYear = currentYear + 1;
+
+    const scheduleDates = getScheduleDatesByFrequency(master.frequency, startYear, endYear);
 
     const { error: deleteError } = await supabase
       .from('execution_record')
@@ -345,7 +373,7 @@ export function useSecurityActivityData() {
 
     if (deleteError) {
       console.error('execution_record delete error:', deleteError);
-      throw deleteError;
+      throw new Error(deleteError.message);
     }
 
     if (scheduleDates.length === 0) {
@@ -354,7 +382,9 @@ export function useSecurityActivityData() {
 
     const payload = scheduleDates.map((dueDate) => ({
       activity_master_id: master.id,
-      department: master.department,
+      owner_department: master.ownerDepartment,
+      partner_department: master.partnerDepartment,
+      department: master.ownerDepartment,
       frequency_label: master.frequency,
       title: master.name,
       description: master.purpose,
@@ -368,16 +398,23 @@ export function useSecurityActivityData() {
 
     if (insertError) {
       console.error('execution_record insert error:', insertError);
-      throw insertError;
+      throw new Error(insertError.message);
     }
   };
 
   const saveSelectedMaster = async () => {
     if (!supabase || !selectedMaster) return;
 
+    const normalizedPartnerDepartment =
+      selectedMaster.partnerDepartment && selectedMaster.partnerDepartment.trim() !== ''
+        ? selectedMaster.partnerDepartment
+        : null;
+
     const payload = {
       name: selectedMaster.name,
-      department: selectedMaster.department,
+      owner_department: selectedMaster.ownerDepartment,
+      partner_department: normalizedPartnerDepartment,
+      department: selectedMaster.ownerDepartment,
       frequency: selectedMaster.frequency,
       purpose: selectedMaster.purpose,
       guide: selectedMaster.guide,
@@ -395,7 +432,7 @@ export function useSecurityActivityData() {
 
       if (error) {
         console.error('activity_master insert error:', error);
-        throw error;
+        throw new Error(error.message);
       }
 
       const mapped = mapMaster(data);
@@ -417,7 +454,7 @@ export function useSecurityActivityData() {
 
     if (error) {
       console.error('activity_master update error:', error);
-      throw error;
+      throw new Error(error.message);
     }
 
     const mapped = mapMaster(data);
@@ -425,6 +462,87 @@ export function useSecurityActivityData() {
     await syncExecutionRecords(mapped);
     await loadMasters();
     await loadRecords();
+  };
+
+  const deleteSelectedMaster = async () => {
+    if (!selectedMaster) {
+      throw new Error('삭제할 보안 활동이 없습니다.');
+    }
+
+    const deletingId = selectedMaster.id;
+
+    if (deletingId.startsWith('temp-')) {
+      setMasters((prev) => prev.filter((item) => item.id !== deletingId));
+
+      const remainingMasters = masters.filter((item) => item.id !== deletingId);
+      setSelectedMasterId(remainingMasters[0]?.id ?? '');
+
+      return;
+    }
+
+    if (!supabase) {
+      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    }
+
+    const relatedRecordIds = records
+      .filter((item) => item.activityMasterId === deletingId)
+      .map((item) => item.id);
+
+    if (relatedRecordIds.length > 0) {
+      const evidenceRows = relatedRecordIds.flatMap(
+        (recordId) => evidenceFilesByRecord[recordId] ?? [],
+      );
+
+      if (evidenceRows.length > 0) {
+        const filePaths = evidenceRows
+          .map((item) => item.filePath)
+          .filter((path): path is string => Boolean(path));
+
+        if (filePaths.length > 0) {
+          const { error: storageRemoveError } = await supabase.storage
+            .from('evidence-files')
+            .remove(filePaths);
+
+          if (storageRemoveError) {
+            console.error('storage remove error:', storageRemoveError);
+          }
+        }
+
+        const { error: evidenceDeleteError } = await supabase
+          .from('evidence_file')
+          .delete()
+          .in('execution_record_id', relatedRecordIds);
+
+        if (evidenceDeleteError) {
+          console.error('evidence_file delete error:', evidenceDeleteError);
+          throw new Error(evidenceDeleteError.message);
+        }
+      }
+
+      const { error: recordDeleteError } = await supabase
+        .from('execution_record')
+        .delete()
+        .eq('activity_master_id', deletingId);
+
+      if (recordDeleteError) {
+        console.error('execution_record delete error:', recordDeleteError);
+        throw new Error(recordDeleteError.message);
+      }
+    }
+
+    const { error: masterDeleteError } = await supabase
+      .from('activity_master')
+      .delete()
+      .eq('id', deletingId);
+
+    if (masterDeleteError) {
+      console.error('activity_master delete error:', masterDeleteError);
+      throw new Error(masterDeleteError.message);
+    }
+
+    await loadMasters();
+    await loadRecords();
+    await loadEvidenceFiles();
   };
 
   const setSelectedExecutionNote = (value: string) => {
@@ -447,7 +565,7 @@ export function useSecurityActivityData() {
 
     if (error) {
       console.error('execution_record note update error:', error);
-      throw error;
+      throw new Error(error.message);
     }
 
     await loadRecords();
@@ -497,7 +615,7 @@ export function useSecurityActivityData() {
 
     if (error) {
       console.error('execution_record complete error:', error);
-      throw error;
+      throw new Error(error.message);
     }
 
     await loadRecords();
@@ -534,6 +652,7 @@ export function useSecurityActivityData() {
     dashboardTasks,
     updateMasterField,
     saveSelectedMaster,
+    deleteSelectedMaster,
     setSelectedExecutionNote,
     updateExecutionNote,
     uploadEvidenceFile,

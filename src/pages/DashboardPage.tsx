@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef, useState } from 'react';
+import { ChangeEvent, useMemo, useRef, useState } from 'react';
 import Header from '@/components/layout/Header';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import MobileTopBar from '@/components/layout/MobileTopBar';
@@ -16,6 +16,13 @@ type DashboardPageProps = {
   userEmail: string;
   onLogout: () => void;
 };
+
+function formatExecutionTargetPeriod(dueDate: string) {
+  const date = new Date(dueDate);
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  return `${year}년 ${month}월 활동`;
+}
 
 export default function DashboardPage({ userEmail, onLogout }: DashboardPageProps) {
   const [activeMenu, setActiveMenu] = useState<AppMenu>('dashboard');
@@ -51,7 +58,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     catalogTotalPages,
     paginatedMasters,
     dashboardTasks,
+    updateMasterField,
     saveSelectedMaster,
+    deleteSelectedMaster,
     setSelectedExecutionNote,
     updateExecutionNote,
     uploadEvidenceFile,
@@ -70,13 +79,14 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
             ? '수행 및 증적 관리'
             : '리포트 생성';
 
-  const openExecutionRegistrationFromTitle = (title: string) => {
-    const matched = records.find((item) => item.title === title);
+  const selectedExecutionTargetPeriod = useMemo(() => {
+    if (!selectedExecutionRecord) return '';
+    return formatExecutionTargetPeriod(selectedExecutionRecord.dueDate);
+  }, [selectedExecutionRecord]);
 
-    if (matched) {
-      setSelectedExecutionRecordId(matched.id);
-      setActiveMenu('register');
-    }
+  const openExecutionRegistrationFromCalendar = (executionRecordId: string) => {
+    setSelectedExecutionRecordId(executionRecordId);
+    setActiveMenu('register');
   };
 
   const openDelayedActivities = () => {
@@ -92,7 +102,8 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     const blankMaster: ActivityMaster = {
       id: tempId,
       name: '',
-      department: '',
+      ownerDepartment: '정보보호유닛',
+      partnerDepartment: null,
       frequency: '수시',
       purpose: '',
       guide: '',
@@ -111,9 +122,38 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
       setActiveMenu('catalog');
     } catch (error) {
       console.error('saveSelectedMaster error:', error);
-      window.alert(
-        error instanceof Error ? `저장 오류: ${error.message}` : '저장 중 오류가 발생했습니다.',
-      );
+
+      if (error instanceof Error) {
+        window.alert(`저장 오류: ${error.message}`);
+        return;
+      }
+
+      window.alert('저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteMaster = async () => {
+    if (!selectedMaster) return;
+
+    const confirmed = window.confirm(
+      `"${selectedMaster.name || '선택한 보안 활동'}"을(를) 삭제하시겠습니까?\n연결된 수행 대상과 증적도 함께 삭제됩니다.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteSelectedMaster();
+      window.alert('삭제되었습니다.');
+      setActiveMenu('catalog');
+    } catch (error) {
+      console.error('deleteSelectedMaster error:', error);
+
+      if (error instanceof Error) {
+        window.alert(`삭제 오류: ${error.message}`);
+        return;
+      }
+
+      window.alert('삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -149,7 +189,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     } catch (error) {
       console.error('updateExecutionNote error:', error);
       window.alert(
-        error instanceof Error ? `수행 내역 저장 오류: ${error.message}` : '수행 내역 저장 중 오류가 발생했습니다.',
+        error instanceof Error
+          ? `수행 내역 저장 오류: ${error.message}`
+          : '수행 내역 저장 중 오류가 발생했습니다.',
       );
     }
   };
@@ -180,7 +222,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
       '',
       ...delayedRecords.map(
         (item, index) =>
-          `${index + 1}. ${item.title} / ${item.department} / 기한 ${item.dueDate.slice(0, 7)}`,
+          `${index + 1}. ${item.title} / ${item.ownerDepartment}${
+            item.partnerDepartment ? ` · ${item.partnerDepartment}` : ''
+          } / 기한 ${item.dueDate.slice(0, 7)}`,
       ),
       '',
       '조속히 수행 내역 작성 및 증적 업로드를 진행해 주세요.',
@@ -233,8 +277,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 dashboardStats={dashboardStats}
                 currentDateTime={formatNow(now)}
                 currentMonth={now.getMonth() + 1}
+                currentYear={now.getFullYear()}
                 dashboardTasks={dashboardTasks}
-                openMasterFromCalendar={openExecutionRegistrationFromTitle}
+                openMasterFromCalendar={openExecutionRegistrationFromCalendar}
                 onDelayedEmailAlert={handleDelayedEmailAlert}
               />
             )}
@@ -253,6 +298,8 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 selectedMaster={selectedMaster}
                 onCreateNew={handleCreateNewMaster}
                 onSave={handleSaveMaster}
+                onDelete={handleDeleteMaster}
+                updateMasterField={updateMasterField}
               />
             )}
 
@@ -260,6 +307,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
               <RegisterPage
                 selectedExecutionRecord={selectedExecutionRecord}
                 selectedExecutionEvidenceFiles={selectedExecutionEvidenceFiles}
+                selectedExecutionTargetPeriod={selectedExecutionTargetPeriod}
                 onChangeExecutionNote={setSelectedExecutionNote}
                 onSaveExecutionNote={handleSaveExecutionNote}
                 onOpenFileDialog={() => fileInputRef.current?.click()}
@@ -294,7 +342,12 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
         </main>
       </div>
 
-      <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
 
       <MobileBottomNav activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
     </div>
