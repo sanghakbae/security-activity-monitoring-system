@@ -13,6 +13,7 @@ type CatalogPageProps = {
   setCatalogPage: (page: number) => void;
   selectedMaster: ActivityMaster;
   onCreateNew: () => void;
+  onSave: () => void;
 };
 
 export default function CatalogPage({
@@ -27,6 +28,7 @@ export default function CatalogPage({
   setCatalogPage,
   selectedMaster,
   onCreateNew,
+  onSave,
 }: CatalogPageProps) {
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[440px_1fr]">
@@ -84,23 +86,36 @@ export default function CatalogPage({
             <div className="text-xs text-slate-400">활동명</div>
             <div className="mt-2 text-[18px] font-semibold">{selectedMaster.name}</div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs text-slate-400">협업 부서</div>
             <div className="mt-2 text-[18px] font-semibold">{selectedMaster.department}</div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
             <div className="text-xs text-slate-400">수행 주기</div>
             <div className="mt-2 text-[18px] font-semibold">{selectedMaster.frequency}</div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
             <div className="text-xs text-slate-400">활동 목적</div>
             <div className="mt-2 leading-7 text-slate-700">{selectedMaster.purpose}</div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
             <div className="text-xs text-slate-400">수행 가이드</div>
             <div className="mt-2 leading-7 text-slate-700">{selectedMaster.guide}</div>
           </div>
-          <div className="flex justify-end md:col-span-2">
+
+          <div className="flex justify-end gap-3 md:col-span-2">
+            <button
+              type="button"
+              onClick={onSave}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              저장
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveMenu('register')}

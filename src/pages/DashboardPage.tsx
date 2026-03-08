@@ -104,6 +104,19 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     setActiveMenu('catalog');
   };
 
+  const handleSaveMaster = async () => {
+    try {
+      await saveSelectedMaster();
+      window.alert('저장되었습니다.');
+      setActiveMenu('catalog');
+    } catch (error) {
+      console.error('saveSelectedMaster error:', error);
+      window.alert(
+        error instanceof Error ? `저장 오류: ${error.message}` : '저장 중 오류가 발생했습니다.',
+      );
+    }
+  };
+
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
@@ -174,19 +187,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     ].join('\n');
 
     window.location.href = `mailto:${userEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  };
-
-  const handleSaveMaster = async () => {
-    try {
-      await saveSelectedMaster();
-      window.alert('저장되었습니다.');
-      setActiveMenu('catalog');
-    } catch (error) {
-      console.error('saveSelectedMaster error:', error);
-      window.alert(
-        error instanceof Error ? `저장 오류: ${error.message}` : '저장 중 오류가 발생했습니다.',
-      );
-    }
   };
 
   if (loading) {
