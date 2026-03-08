@@ -1,117 +1,66 @@
-import { supabase } from '@/lib/supabase';
-import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env';
+import { supabase } from '@/lib/supabase'
+import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env'
 
-const APP_BASE_PATH = '/security-activity-monitoring-system';
+const APP_BASE_PATH = '/security-activity-monitoring-system'
 
-function getAppBaseUrl() {
-  if (typeof window === 'undefined') {
-    return '';
-  }
+export type AuthState = {
+  authenticated: boolean
+  email: string | null
+}
 
-  const origin = window.location.origin;
-
+function getBaseUrl() {
   if (import.meta.env.PROD) {
-    return `${origin}${APP_BASE_PATH}`;
+    return `${window.location.origin}${APP_BASE_PATH}`
   }
-
-  return origin;
+  return window.location.origin
 }
 
 export async function signInWithGoogle() {
-  if (AUTH_MODE === 'mock') {
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not initialized')
 
-  if (!supabase) {
-    throw new Error('Supabase client is not initialized.');
-  }
-
-  const redirectTo = `${getAppBaseUrl()}/auth/callback`;
+  const redirectTo = `${getBaseUrl()}/auth/callback`
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
       queryParams: {
-        hd: ALLOWED_DOMAIN,
-        prompt: 'select_account',
-      },
-    },
-  });
+        hd: ALLOWED_DOMAIN
+      }
+    }
+  })
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error
 }
 
 export async function signOut() {
-  if (AUTH_MODE === 'mock') {
-    return;
-  }
-
-  if (!supabase) {
-    throw new Error('Supabase client is not initialized.');
-  }
-
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    throw error;
-  }
+  if (!supabase) return
+  await supabase.auth.signOut()
 }
 
-export async function getSession() {
-  if (AUTH_MODE === 'mock') {
-    return {
-      session: {
-        user: {
-          email: `test@${ALLOWED_DOMAIN}`,
-        },
-      },
-    };
-  }
-
+export async function handleAuthCallback(): Promise<AuthState> {
   if (!supabase) {
-    return { session: null };
+    return { authenticated: false, email: null }
   }
 
   const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-
-  if (error) {
-    throw error;
-  }
-
-  return { session };
-}
-
-export async function validateCurrentUser() {
-  const { session } = await getSession();
+    data: { session }
+  } = await supabase.auth.getSession()
 
   if (!session?.user?.email) {
-    return {
-      authenticated: false,
-      email: null,
-    };
+    return { authenticated: false, email: null }
   }
 
-  const email = session.user.email;
-  const domain = email.split('@')[1]?.toLowerCase() ?? '';
-  const allowedDomain = ALLOWED_DOMAIN.toLowerCase();
+  const email = session.user.email
+  const domain = email.split('@')[1]
 
-  if (domain !== allowedDomain) {
-    await signOut();
-
-    return {
-      authenticated: false,
-      email: null,
-    };
+  if (domain !== ALLOWED_DOMAIN) {
+    await signOut()
+    return { authenticated: false, email: null }
   }
 
   return {
     authenticated: true,
-    email,
-  };
+    email
+  }
 }

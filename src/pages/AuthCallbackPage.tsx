@@ -1,14 +1,28 @@
-import { useEffect } from 'react';
-import { handleAuthCallback } from '@/auth/auth';
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { handleAuthCallback } from '@/auth/auth'
 
 export default function AuthCallbackPage() {
-  useEffect(() => {
-    void handleAuthCallback().catch((error) => {
-      console.error(error);
-      window.alert('로그인 처리 중 오류가 발생했습니다.');
-      window.location.replace('/');
-    });
-  }, []);
+  const navigate = useNavigate()
 
-  return <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-500">로그인 처리 중...</div>;
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const result = await handleAuthCallback()
+
+        if (result.authenticated) {
+          navigate('/')
+        } else {
+          navigate('/login')
+        }
+      } catch (err: unknown) {
+        console.error(err)
+        navigate('/login')
+      }
+    }
+
+    run()
+  }, [navigate])
+
+  return <div>로그인 처리 중...</div>
 }

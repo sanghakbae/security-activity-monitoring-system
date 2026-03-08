@@ -1,10 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { signInWithGoogle, signOut, validateCurrentUser } from '@/auth/auth';
-import type { AuthState } from '@/auth/auth';
+import { AuthState, signOut, validateCurrentUser } from '@/auth/auth';
 import AuthCallbackPage from '@/pages/AuthCallbackPage';
 import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
+
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-500">
+      Loading...
+    </div>
+  );
+}
+
+function ProtectedRoute({
+  authenticated,
+  email,
+  onLogout,
+}: {
+  authenticated: boolean;
+  email: string | null;
+  onLogout: () => Promise<void>;
+}) {
+  if (!authenticated || !email) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <DashboardPage userEmail={email} onLogout={onLogout} />;
+}
+
+function PublicLoginRoute({
+  authenticated,
+}: {
+  authenticated: boolean;
+}) {
+  if (authenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <LoginPage />;
+}
 
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -14,12 +49,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const check = async () => {
+    const run = async () => {
       try {
         const result = await validateCurrentUser();
         setAuthState(result);
       } catch (error) {
-        console.error(error);
+        console.error('validateCurrentUser error:', error);
         setAuthState({
           authenticated: false,
           email: null,
@@ -29,27 +64,14 @@ export default function App() {
       }
     };
 
-    void check();
+    void run();
   }, []);
-
-  const handleLogin = async () => {
-    try {
-      const result = await signInWithGoogle();
-
-      if (result.authenticated) {
-        setAuthState(result);
-      }
-    } catch (error) {
-      console.error(error);
-      window.alert('로그인 중 오류가 발생했습니다.');
-    }
-  };
 
   const handleLogout = async () => {
     try {
       await signOut();
     } catch (error) {
-      console.error(error);
+      console.error('signOut error:', error);
     } finally {
       setAuthState({
         authenticated: false,
@@ -58,30 +80,36 @@ export default function App() {
     }
   };
 
+  const basename = useMemo(() => {
+    const base = import.meta.env.BASE_URL ?? '/';
+    if (base === '/' || base === '') {
+      return undefined;
+    }
+    return base.endsWith('/') ? base.slice(0, -1) : base;
+  }, []);
+
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-500">
-        Loading...
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
+        <Route
+          path="/login"
+          element={<PublicLoginRoute authenticated={authState.authenticated} />}
+        />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
-
         <Route
           path="/"
           element={
-            authState.authenticated && authState.email ? (
-              <DashboardPage userEmail={authState.email} onLogout={handleLogout} />
-            ) : (
-              <LoginPage onLogin={handleLogin} />
-            )
+            <ProtectedRoute
+              authenticated={authState.authenticated}
+              email={authState.email}
+              onLogout={handleLogout}
+            />
           }
         />
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
