@@ -51,7 +51,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     catalogTotalPages,
     paginatedMasters,
     dashboardTasks,
-    updateMasterField,
     saveSelectedMaster,
     setSelectedExecutionNote,
     updateExecutionNote,
@@ -103,19 +102,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     setMasters((prev) => [blankMaster, ...prev]);
     setSelectedMasterId(tempId);
     setActiveMenu('catalog');
-  };
-
-  const handleSaveMaster = async () => {
-    try {
-      await saveSelectedMaster();
-      window.alert('저장되었습니다.');
-      setActiveMenu('catalog');
-    } catch (error) {
-      console.error('saveSelectedMaster error:', error);
-      window.alert(
-        error instanceof Error ? `저장 오류: ${error.message}` : '저장 중 오류가 발생했습니다.',
-      );
-    }
   };
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -190,6 +176,19 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     window.location.href = `mailto:${userEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
+  const handleSaveMaster = async () => {
+    try {
+      await saveSelectedMaster();
+      window.alert('저장되었습니다.');
+      setActiveMenu('catalog');
+    } catch (error) {
+      console.error('saveSelectedMaster error:', error);
+      window.alert(
+        error instanceof Error ? `저장 오류: ${error.message}` : '저장 중 오류가 발생했습니다.',
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-500">
@@ -253,6 +252,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 setCatalogPage={setCatalogPage}
                 selectedMaster={selectedMaster}
                 onCreateNew={handleCreateNewMaster}
+                onSave={handleSaveMaster}
               />
             )}
 

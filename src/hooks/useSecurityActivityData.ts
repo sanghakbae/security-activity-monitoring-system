@@ -203,7 +203,7 @@ export function useSecurityActivityData() {
       rows.map(async (row) => {
         let thumbnailUrl = '';
 
-        if (row.file_path) {
+        if (row.file_path && supabase) {
           const { data: signed } = await supabase.storage
             .from('evidence-files')
             .createSignedUrl(row.file_path, 60 * 60);
@@ -327,7 +327,9 @@ export function useSecurityActivityData() {
   const dashboardTasks = useMemo(() => buildDashboardTasksFromRecords(records), [records]);
 
   const updateMasterField = <K extends keyof ActivityMaster>(field: K, value: ActivityMaster[K]) => {
-    setMasters((prev) => prev.map((item) => (item.id === selectedMasterId ? { ...item, [field]: value } : item)));
+    setMasters((prev) =>
+      prev.map((item) => (item.id === selectedMasterId ? { ...item, [field]: value } : item)),
+    );
   };
 
   const syncExecutionRecords = async (master: ActivityMaster) => {

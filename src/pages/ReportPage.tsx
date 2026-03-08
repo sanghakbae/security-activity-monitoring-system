@@ -26,12 +26,16 @@ export default function ReportPage({ records, evidenceFilesByRecord }: ReportPag
       if (recordYear !== year) return false;
 
       if (reportType === 'quarter') {
-        const quarterRange = {
+        const quarterRanges: Record<number, number[]> = {
           1: [1, 2, 3],
           2: [4, 5, 6],
           3: [7, 8, 9],
           4: [10, 11, 12],
-        }[quarter];
+        };
+
+        const quarterRange = quarterRanges[quarter];
+        if (!quarterRange) return false;
+
         return quarterRange.includes(month);
       }
 
@@ -46,6 +50,7 @@ export default function ReportPage({ records, evidenceFilesByRecord }: ReportPag
   const handleGenerate = async () => {
     try {
       setIsGenerating(true);
+
       await generateSecurityReportPdf({
         reportType,
         year,
