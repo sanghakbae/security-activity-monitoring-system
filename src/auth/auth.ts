@@ -1,66 +1,123 @@
-import { supabase } from '@/lib/supabase'
-import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env'
+import { supabase } from '@/lib/supabase';
+import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env';
 
-const APP_BASE_PATH = '/security-activity-monitoring-system'
+const APP_BASE_PATH = '/security-activity-monitoring-system';
 
 export type AuthState = {
-  authenticated: boolean
-  email: string | null
-}
+  authenticated: boolean;
+  email: string | null;
+};
 
 function getBaseUrl() {
-  if (import.meta.env.PROD) {
-    return `${window.location.origin}${APP_BASE_PATH}`
+  if (typeof window === 'undefined') {
+    return '';
   }
-  return window.location.origin
+
+  if (import.meta.env.PROD) {
+    return `${window.location.origin}${APP_BASE_PATH}`;
+  }
+
+  return window.location.origin;
 }
 
 export async function signInWithGoogle() {
-  if (!supabase) throw new Error('Supabase not initialized')
+  if (AUTH_MODE === 'mock') {
+    return;
+  }
 
-  const redirectTo = `${getBaseUrl()}/auth/callback`
+  if (!supabase) {
+    throw new Error('Supabase client is not initialized.');
+  }
+
+  const redirectTo = `${getBaseUrl()}/auth/callback`;
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
       queryParams: {
-        hd: ALLOWED_DOMAIN
-      }
-    }
-  })
+        hd: ALLOWED_DOMAIN,
+        prompt: 'select_account',
+      },
+    },
+  });
 
-  if (error) throw error
+  if (error) {
+    throw error;
+  }
 }
 
 export async function signOut() {
-  if (!supabase) return
-  await supabase.auth.signOut()
+  if (AUTH_MODE === 'mock') {
+    return;
+  }
+
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    throw error;
+  }
 }
 
-export async function handleAuthCallback(): Promise<AuthState> {
+export async function getSession() {
+  if (AUTH_MODE === 'mock') {
+    return {
+      session: {
+        user: {
+          email: `test@${ALLOWED_DOMAIN}`,
+        },
+      },
+    };
+  }
+
   if (!supabase) {
-    return { authenticated: false, email: null }
+    return { session: null };
   }
 
   const {
-    data: { session }
-  } = await supabase.auth.getSession()
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
 
-  if (!session?.user?.email) {
-    return { authenticated: false, email: null }
+  if (error) {
+    throw error;
   }
 
-  const email = session.user.email
-  const domain = email.split('@')[1]
+  return { session };
+}
 
-  if (domain !== ALLOWED_DOMAIN) {
-    await signOut()
-    return { authenticated: false, email: null }
+export async function validateCurrentUser(): Promise<AuthState> {
+  const { session } = await getSession();
+
+  if (!session?.user?.email) {
+    return {
+      authenticated: false,
+      email: null,
+    };
+  }
+
+  const email = session.user.email;
+  const domain = email.split('@')[1]?.toLowerCase() ?? '';
+
+  if (domain !== ALLOWED_DOMAIN.toLowerCase()) {
+    await signOut();
+
+    return {
+      authenticated: false,
+      email: null,
+    };
   }
 
   return {
     authenticated: true,
-    email
-  }
+    email,
+  };
+}
+
+export async function handleAuthCallback(): Promise<AuthState> {
+  return validateCurrentUser();
 }

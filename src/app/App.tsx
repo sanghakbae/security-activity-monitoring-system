@@ -31,14 +31,16 @@ function ProtectedRoute({
 
 function PublicLoginRoute({
   authenticated,
+  onLogin,
 }: {
   authenticated: boolean;
+  onLogin: (state: AuthState) => void;
 }) {
   if (authenticated) {
     return <Navigate to="/" replace />;
   }
 
-  return <LoginPage />;
+  return <LoginPage onLogin={onLogin} />;
 }
 
 export default function App() {
@@ -97,7 +99,12 @@ export default function App() {
       <Routes>
         <Route
           path="/login"
-          element={<PublicLoginRoute authenticated={authState.authenticated} />}
+          element={
+            <PublicLoginRoute
+              authenticated={authState.authenticated}
+              onLogin={setAuthState}
+            />
+          }
         />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route
