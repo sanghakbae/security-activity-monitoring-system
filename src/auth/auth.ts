@@ -29,7 +29,7 @@ export async function signInWithGoogle() {
     throw new Error('Supabase client is not initialized.');
   }
 
-  const redirectTo = `${getBaseUrl()}/auth/callback`;
+  const redirectTo = `${getBaseUrl()}/`;
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

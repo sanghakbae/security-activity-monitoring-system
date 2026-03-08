@@ -52,7 +52,6 @@ export default function Sidebar({
                 <div className="truncate text-[18px] font-semibold text-slate-900">
                   보안 활동 모니터링
                 </div>
-                <div className="text-xs text-slate-500">SecuGuard</div>
               </div>
             </>
           )}
