@@ -12,15 +12,19 @@ type MobileBottomNavProps = {
   setActiveMenu: (menu: AppMenu) => void;
 };
 
-export default function MobileBottomNav({ activeMenu, setActiveMenu }: MobileBottomNavProps) {
-  const items: Array<{ key: AppMenu; label: string; icon: any }> = [
-    { key: 'dashboard', label: '대시보드', icon: LayoutDashboard },
-    { key: 'catalog', label: '목록관리', icon: ClipboardList },
-    { key: 'register', label: '활동등록', icon: ClipboardPlus },
-    { key: 'execution', label: '수행관리', icon: CheckCircle2 },
-    { key: 'report', label: '리포트', icon: FileText },
-  ];
+const items: Array<{
+  key: AppMenu;
+  label: string;
+  icon: typeof LayoutDashboard;
+}> = [
+  { key: 'dashboard', label: '대시보드', icon: LayoutDashboard },
+  { key: 'catalog', label: '목록관리', icon: ClipboardList },
+  { key: 'register', label: '활동등록', icon: ClipboardPlus },
+  { key: 'execution', label: '수행관리', icon: CheckCircle2 },
+  { key: 'report', label: '리포트', icon: FileText },
+];
 
+export default function MobileBottomNav({ activeMenu, setActiveMenu }: MobileBottomNavProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
       <div className="grid grid-cols-5 gap-1">

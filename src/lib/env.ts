@@ -1,4 +1,8 @@
-export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE ?? 'mock';
-export const ALLOWED_DOMAIN = import.meta.env.VITE_ALLOWED_DOMAIN ?? 'muhayu.com';
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+export const env = {
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+};
+
+export function hasSupabaseEnv() {
+  return Boolean(env.supabaseUrl && env.supabaseAnonKey);
+}
