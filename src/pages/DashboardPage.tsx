@@ -1,16 +1,15 @@
 import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, Paperclip, Save } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import MobileTopBar from '@/components/layout/MobileTopBar';
 import Sidebar from '@/components/layout/Sidebar';
 import DashboardView from '@/components/dashboard/DashboardView';
 import CatalogPage from '@/pages/CatalogPage';
-import RegisterPage from '@/pages/RegisterPage';
 import ExecutionPage from '@/pages/ExecutionPage';
 import ReportPage from '@/pages/ReportPage';
 import { useSecurityActivityData } from '@/hooks/useSecurityActivityData';
-import { supabase } from '@/lib/supabase';
-import type { AppMenu, ActivityMaster } from '@/types';
+import type { AppMenu, ActivityMaster, ExecutionRecord } from '@/types';
 import { formatNow } from '@/utils/date';
 
 type DashboardPageProps = {
@@ -38,7 +37,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     masters,
     setMasters,
     records,
-    delayedRecords,
     evidenceFilesByRecord,
     selectedMaster,
     selectedMasterId,
@@ -57,7 +55,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     filteredRecords,
     paginatedExecutionRecords,
     executionPageSize,
-    executionTotalPages,
     catalogPageSize,
     catalogTotalPages,
     paginatedMasters,
@@ -83,10 +80,29 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
             ? '수행 및 증적 관리'
             : '리포트 생성';
 
+  const fallbackExecutionRecord = useMemo<ExecutionRecord>(
+    () => ({
+      id: 'placeholder-register-record',
+      activityMasterId: undefined,
+      ownerDepartment: '정보보호유닛',
+      partnerDepartment: null,
+      frequencyLabel: '수시',
+      title: '등록할 보안 활동을 선택해 주세요.',
+      description: '',
+      dueDate: new Date().toISOString().slice(0, 10),
+      status: '예약',
+      evidenceRequired: false,
+      executionNote: '',
+    }),
+    [],
+  );
+
+  const registerExecutionRecord = selectedExecutionRecord ?? fallbackExecutionRecord;
+  const isPlaceholderRegister = registerExecutionRecord.id === 'placeholder-register-record';
+
   const selectedExecutionTargetPeriod = useMemo(() => {
-    if (!selectedExecutionRecord) return '';
-    return formatExecutionTargetPeriod(selectedExecutionRecord.dueDate);
-  }, [selectedExecutionRecord]);
+    return formatExecutionTargetPeriod(registerExecutionRecord.dueDate);
+  }, [registerExecutionRecord]);
 
   const executionRecordsForView = useMemo(() => {
     if (executionFilterMode === 'all') {
@@ -107,10 +123,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
 
       if (executionFilterMode === 'currentMonth') {
         const dueDate = new Date(item.dueDate);
-        return (
-          dueDate.getFullYear() === currentYear &&
-          dueDate.getMonth() + 1 === currentMonth
-        );
+        return dueDate.getFullYear() === currentYear && dueDate.getMonth() + 1 === currentMonth;
       }
 
       return true;
@@ -146,10 +159,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
 
       if (executionFilterMode === 'currentMonth') {
         const dueDate = new Date(item.dueDate);
-        return (
-          dueDate.getFullYear() === currentYear &&
-          dueDate.getMonth() + 1 === currentMonth
-        );
+        return dueDate.getFullYear() === currentYear && dueDate.getMonth() + 1 === currentMonth;
       }
 
       return true;
@@ -157,10 +167,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
   }, [executionFilterMode, filteredRecords, now]);
 
   const executionTotalPagesForView = useMemo(() => {
-    return Math.max(
-      1,
-      Math.ceil(executionFilteredLengthForView / executionPageSize),
-    );
+    return Math.max(1, Math.ceil(executionFilteredLengthForView / executionPageSize));
   }, [executionFilteredLengthForView, executionPageSize]);
 
   const openExecutionRegistrationFromCalendar = (executionRecordId: string) => {
@@ -254,7 +261,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
-    if (!file || !selectedExecutionRecordId) {
+    if (!file || !selectedExecutionRecordId || !selectedExecutionRecord) {
       event.target.value = '';
       return;
     }
@@ -275,7 +282,10 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
   };
 
   const handleSaveExecutionNote = async () => {
-    if (!selectedExecutionRecord) return;
+    if (!selectedExecutionRecord) {
+      window.alert('먼저 수행 및 증적 관리 또는 보안 활동 캘린더에서 등록할 활동을 선택해 주세요.');
+      return;
+    }
 
     try {
       await updateExecutionNote(selectedExecutionRecord.id, selectedExecutionRecord.executionNote);
@@ -291,7 +301,10 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
   };
 
   const handleComplete = async () => {
-    if (!selectedExecutionRecord) return;
+    if (!selectedExecutionRecord) {
+      window.alert('먼저 수행 및 증적 관리 또는 보안 활동 캘린더에서 완료 처리할 활동을 선택해 주세요.');
+      return;
+    }
 
     try {
       await markExecutionRecordComplete(selectedExecutionRecord.id);
@@ -301,50 +314,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
       window.alert(
         error instanceof Error ? `완료 처리 오류: ${error.message}` : '완료 처리 중 오류가 발생했습니다.',
       );
-    }
-  };
-
-  const handleDelayedChatAlert = async () => {
-    if (delayedRecords.length === 0) {
-      window.alert('지연된 보안 활동이 없습니다.');
-      return;
-    }
-
-    if (!supabase) {
-      window.alert('Supabase 클라이언트가 초기화되지 않았습니다.');
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke('send-delayed-alert');
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      if (data?.error) {
-        throw new Error(
-          typeof data.detail === 'string'
-            ? `${data.error} - ${data.detail}`
-            : data.error,
-        );
-      }
-
-      const message =
-        typeof data?.message === 'string'
-          ? data.message
-          : 'Google Chat 알림이 전송되었습니다.';
-
-      window.alert(message);
-    } catch (error) {
-      console.error('send-delayed-alert invoke error:', error);
-
-      if (error instanceof Error) {
-        window.alert(`Google Chat 알림 오류: ${error.message}`);
-        return;
-      }
-
-      window.alert('Google Chat 알림 전송 중 오류가 발생했습니다.');
     }
   };
 
@@ -425,18 +394,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
               />
             )}
 
-            {activeMenu === 'register' && selectedExecutionRecord && (
-              <RegisterPage
-                selectedExecutionRecord={selectedExecutionRecord}
-                selectedExecutionEvidenceFiles={selectedExecutionEvidenceFiles}
-                selectedExecutionTargetPeriod={selectedExecutionTargetPeriod}
-                onChangeExecutionNote={setSelectedExecutionNote}
-                onSaveExecutionNote={handleSaveExecutionNote}
-                onOpenFileDialog={() => fileInputRef.current?.click()}
-                onComplete={handleComplete}
-              />
-            )}
-
             {activeMenu === 'execution' && (
               <ExecutionPage
                 keyword={keyword}
@@ -455,6 +412,126 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                   setActiveMenu('register');
                 }}
               />
+            )}
+
+            {activeMenu === 'register' && (
+              <div className="space-y-5">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-5 border-b border-slate-100 pb-4">
+                    <div className="text-[18px] font-semibold">보안 활동 등록</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      수행 내역과 증적을 등록합니다.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 px-5 py-4">
+                      <div className="text-[12px] font-medium text-slate-400">보안 활동명</div>
+                      <div className="mt-3 text-[14px] font-semibold text-slate-900">
+                        {registerExecutionRecord.title || '-'}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 px-5 py-4">
+                      <div className="text-[12px] font-medium text-slate-400">대상 기간</div>
+                      <div className="mt-3 text-[14px] font-semibold text-slate-900">
+                        {selectedExecutionTargetPeriod || '-'}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 px-5 py-4">
+                      <div className="text-[12px] font-medium text-slate-400">주기</div>
+                      <div className="mt-3 text-[14px] font-semibold text-slate-900">
+                        {registerExecutionRecord.frequencyLabel || '-'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isPlaceholderRegister && (
+                    <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                      먼저 <span className="font-semibold text-slate-700">수행 및 증적 관리</span> 또는
+                      <span className="font-semibold text-slate-700"> 보안 활동 캘린더</span>에서
+                      등록할 활동을 선택해 주세요.
+                    </div>
+                  )}
+
+                  <div className="mt-6">
+                    <div className="mb-3 text-[15px] font-semibold text-slate-800">수행 내역</div>
+                    <textarea
+                      value={registerExecutionRecord.executionNote ?? ''}
+                      onChange={(e) => onChangeExecutionNote(e.target.value)}
+                      disabled={isPlaceholderRegister}
+                      className="h-52 w-full rounded-2xl border border-slate-200 px-5 py-4 text-[14px] outline-none placeholder:text-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
+                      placeholder="해당 월(또는 분기/반기/연도)의 수행 내역을 입력하세요."
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="text-[18px] font-semibold">증적 자료</div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        파일을 업로드하면 목록이 표시됩니다.
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isPlaceholderRegister}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                      증적 업로드
+                    </button>
+                  </div>
+
+                  {!selectedExecutionRecord || selectedExecutionEvidenceFiles.length === 0 ? (
+                    <div className="flex h-28 items-center justify-center rounded-2xl border border-dashed border-slate-200 text-[14px] text-slate-400">
+                      업로드된 증적이 없습니다.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedExecutionEvidenceFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                        >
+                          <div className="min-w-0 flex-1 truncate text-[13px] text-slate-700">
+                            {file.fileName}
+                          </div>
+                          <div className="ml-4 text-[12px] text-slate-400">
+                            {file.uploadedAt ? String(file.uploadedAt).slice(0, 10) : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveExecutionNote}
+                      disabled={isPlaceholderRegister}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <Save className="h-4 w-4" />
+                      저장
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleComplete}
+                      disabled={isPlaceholderRegister}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      완료 처리
+                    </button>
+                  </div>
+                </section>
+              </div>
             )}
 
             {activeMenu === 'report' && (

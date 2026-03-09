@@ -66,7 +66,7 @@ function getStatusColor(status: ExecutionRecord['status']) {
       return rgb(0.12, 0.38, 0.82);
     case '예약':
     default:
-      return rgb(0.20, 0.48, 0.18);
+      return rgb(0.2, 0.48, 0.18);
   }
 }
 
@@ -200,7 +200,7 @@ function drawCenteredHeaderText(
     y: cellY,
     size: fontSize,
     font,
-    color: rgb(0.22, 0.25, 0.30),
+    color: rgb(0.22, 0.25, 0.3),
   });
 }
 
@@ -332,10 +332,7 @@ export async function generateSecurityReportPdf({
           y: textY,
           size: bodyFontSize,
           font: regularFont,
-          color:
-            index === 2
-              ? getStatusColor(record.status)
-              : rgb(0.15, 0.18, 0.22),
+          color: index === 2 ? getStatusColor(record.status) : rgb(0.15, 0.18, 0.22),
         });
         textY -= lineHeight;
       }
@@ -347,7 +344,13 @@ export async function generateSecurityReportPdf({
   }
 
   const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes.buffer], { type: 'application/pdf' });
+
+  const pdfBuffer = pdfBytes.buffer.slice(
+    pdfBytes.byteOffset,
+    pdfBytes.byteOffset + pdfBytes.byteLength,
+  ) as ArrayBuffer;
+
+  const blob = new Blob([pdfBuffer], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
 
   const fileName = `security-report-${reportType}-${year}${quarter ? `-q${quarter}` : ''}${
