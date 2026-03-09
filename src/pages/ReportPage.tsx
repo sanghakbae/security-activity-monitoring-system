@@ -89,10 +89,10 @@ export default function ReportPage({
   };
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-6 border-b border-slate-100 pb-5">
-          <div className="text-[20px] font-semibold">리포트 생성</div>
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-5 border-b border-slate-100 pb-4">
+          <div className="text-[18px] font-semibold">리포트 생성</div>
           <div className="mt-1 text-sm text-slate-500">
             유형과 기준 연도를 선택한 뒤 PDF 리포트를 생성합니다.
           </div>
@@ -107,13 +107,13 @@ export default function ReportPage({
             }`}
           >
             <div className="w-full">
-              <label className="mb-2 block text-center text-sm font-semibold text-slate-700">
+              <label className="mb-2 block text-center text-[13px] font-semibold text-slate-700">
                 리포트 유형
               </label>
               <select
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value as ReportType)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center font-medium outline-none focus:border-slate-400"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-[14px] font-medium outline-none focus:border-slate-400"
               >
                 <option value="adHoc">수시</option>
                 <option value="quarter">분기</option>
@@ -124,13 +124,13 @@ export default function ReportPage({
 
             {reportType === 'quarter' && (
               <div className="w-full">
-                <label className="mb-2 block text-center text-sm font-semibold text-slate-700">
+                <label className="mb-2 block text-center text-[13px] font-semibold text-slate-700">
                   분기 선택
                 </label>
                 <select
                   value={quarter}
                   onChange={(e) => setQuarter(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center font-medium outline-none focus:border-slate-400"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-[14px] font-medium outline-none focus:border-slate-400"
                 >
                   <option value={1}>1분기</option>
                   <option value={2}>2분기</option>
@@ -142,13 +142,13 @@ export default function ReportPage({
 
             {reportType === 'half' && (
               <div className="w-full">
-                <label className="mb-2 block text-center text-sm font-semibold text-slate-700">
+                <label className="mb-2 block text-center text-[13px] font-semibold text-slate-700">
                   반기 선택
                 </label>
                 <select
                   value={half}
                   onChange={(e) => setHalf(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center font-medium outline-none focus:border-slate-400"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-[14px] font-medium outline-none focus:border-slate-400"
                 >
                   <option value={1}>상반기</option>
                   <option value={2}>하반기</option>
@@ -157,13 +157,13 @@ export default function ReportPage({
             )}
 
             <div className="w-full">
-              <label className="mb-2 block text-center text-sm font-semibold text-slate-700">
+              <label className="mb-2 block text-center text-[13px] font-semibold text-slate-700">
                 기준 연도
               </label>
               <select
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center font-medium outline-none focus:border-slate-400"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-[14px] font-medium outline-none focus:border-slate-400"
               >
                 {yearOptions.map((optionYear) => (
                   <option key={optionYear} value={optionYear}>
@@ -174,14 +174,14 @@ export default function ReportPage({
             </div>
 
             <div className="w-full">
-              <label className="mb-2 block text-center text-sm font-semibold text-slate-700">
+              <label className="mb-2 block text-center text-[13px] font-semibold text-slate-700">
                 PDF 생성
               </label>
               <button
                 type="button"
                 onClick={handleGeneratePdf}
                 disabled={filteredRecords.length === 0 || isGenerating}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-center font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <FileText className="h-4 w-4" />
                 {isGenerating ? '생성 중...' : 'PDF 생성'}
@@ -189,36 +189,36 @@ export default function ReportPage({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-            <div className="text-right text-sm font-semibold text-slate-700">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3.5">
+            <div className="text-right text-[13px] font-semibold text-slate-700">
               대상 활동 수: <span className="text-slate-900">{filteredRecords.length}건</span>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 text-[18px] font-semibold">리포트 대상 미리보기</div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 text-[16px] font-semibold">리포트 대상 미리보기</div>
 
         {filteredRecords.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-9 text-center text-[13px] text-slate-400">
             선택한 조건에 해당하는 활동이 없습니다.
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-slate-200">
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse text-[13px]">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="border-b border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-800">
+                  <th className="border-b border-slate-200 px-3 py-2.5 text-center text-[13px] font-bold text-slate-800">
                     활동명
                   </th>
-                  <th className="border-b border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-800">
+                  <th className="border-b border-slate-200 px-3 py-2.5 text-center text-[13px] font-bold text-slate-800">
                     주기
                   </th>
-                  <th className="border-b border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-800">
+                  <th className="border-b border-slate-200 px-3 py-2.5 text-center text-[13px] font-bold text-slate-800">
                     활동월
                   </th>
-                  <th className="border-b border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-800">
+                  <th className="border-b border-slate-200 px-3 py-2.5 text-center text-[13px] font-bold text-slate-800">
                     상태
                   </th>
                 </tr>
@@ -230,16 +230,16 @@ export default function ReportPage({
 
                   return (
                     <tr key={record.id} className="bg-white">
-                      <td className="border-b border-slate-100 px-4 py-3 text-center text-sm text-slate-800">
+                      <td className="border-b border-slate-100 px-3 py-2.5 text-center text-[13px] text-slate-800">
                         {record.title}
                       </td>
-                      <td className="border-b border-slate-100 px-4 py-3 text-center text-sm text-slate-600">
+                      <td className="border-b border-slate-100 px-3 py-2.5 text-center text-[13px] text-slate-600">
                         {record.frequencyLabel}
                       </td>
-                      <td className="border-b border-slate-100 px-4 py-3 text-center text-sm text-slate-600">
+                      <td className="border-b border-slate-100 px-3 py-2.5 text-center text-[13px] text-slate-600">
                         {activityMonth}
                       </td>
-                      <td className="border-b border-slate-100 px-4 py-3 text-center text-sm font-medium text-slate-700">
+                      <td className="border-b border-slate-100 px-3 py-2.5 text-center text-[13px] font-medium text-slate-700">
                         {record.status}
                       </td>
                     </tr>
