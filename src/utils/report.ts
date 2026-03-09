@@ -347,7 +347,7 @@ export async function generateSecurityReportPdf({
   }
 
   const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const blob = new Blob([pdfBytes.buffer], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
 
   const fileName = `security-report-${reportType}-${year}${quarter ? `-q${quarter}` : ''}${
