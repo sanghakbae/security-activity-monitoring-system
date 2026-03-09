@@ -15,11 +15,25 @@ type GenerateSecurityReportPdfParams = {
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
-const MARGIN_X = 36;
+const MARGIN_X = 20;
 const TOP_Y = PAGE_HEIGHT - 42;
 const BOTTOM_Y = 42;
+
 const FONT_REGULAR_URL = `${import.meta.env.BASE_URL}fonts/KoPubDotumMedium.ttf`;
 const FONT_BOLD_URL = `${import.meta.env.BASE_URL}fonts/KoPubDotumBold.ttf`;
+
+const COLORS = {
+  text: rgb(0.12, 0.16, 0.22),
+  subText: rgb(0.42, 0.47, 0.56),
+  border: rgb(0.82, 0.84, 0.88),
+  headerBg: rgb(0.94, 0.95, 0.97),
+  cardBg: rgb(0.97, 0.98, 0.99),
+  title: rgb(0.05, 0.09, 0.16),
+  complete: rgb(0.05, 0.55, 0.25),
+  delayed: rgb(0.82, 0.18, 0.18),
+  scheduled: rgb(0.22, 0.48, 0.16),
+  inProgress: rgb(0.12, 0.38, 0.82),
+};
 
 function getReportPeriodLabel(
   reportType: ReportType,
@@ -59,14 +73,14 @@ function getStatusLabel(status: ExecutionRecord['status']) {
 function getStatusColor(status: ExecutionRecord['status']) {
   switch (status) {
     case '완료':
-      return rgb(0.05, 0.55, 0.25);
+      return COLORS.complete;
     case '지연':
-      return rgb(0.82, 0.18, 0.18);
+      return COLORS.delayed;
     case '진행중':
-      return rgb(0.12, 0.38, 0.82);
+      return COLORS.inProgress;
     case '예약':
     default:
-      return rgb(0.2, 0.48, 0.18);
+      return COLORS.scheduled;
   }
 }
 
@@ -118,42 +132,143 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
   return lines.length > 0 ? lines : ['-'];
 }
 
-function ensurePage(
-  pdfDoc: PDFDocument,
-  page: PDFPage,
-  currentY: number,
-  requiredHeight: number,
-  regularFont: PDFFont,
-) {
-  if (currentY - requiredHeight >= BOTTOM_Y) {
-    return { page, currentY };
-  }
-
-  const newPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-
-  newPage.drawText('보안 활동 리포트', {
-    x: MARGIN_X,
-    y: TOP_Y,
-    size: 10,
-    font: regularFont,
-    color: rgb(0.45, 0.48, 0.54),
-  });
-
-  return {
-    page: newPage,
-    currentY: TOP_Y - 20,
-  };
-}
-
 function getEvidenceText(files: ExecutionEvidenceFile[]) {
   if (files.length === 0) {
     return '증적 없음';
   }
 
-  return files.map((file, index) => `${index + 1}. ${file.fileName}`).join('\n');
+  return files.map((file) => file.fileName).join(', ');
 }
 
-function drawTableRowBorders(
+function drawText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  y: number,
+  font: PDFFont,
+  size: number,
+  color = COLORS.text,
+) {
+  page.drawText(text, { x, y, font, size, color });
+}
+
+function drawCenteredText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  font: PDFFont,
+  size: number,
+  color = COLORS.text,
+) {
+  const textWidth = font.widthOfTextAtSize(text, size);
+  const textX = x + Math.max(0, (width - textWidth) / 2);
+
+  page.drawText(text, {
+    x: textX,
+    y,
+    font,
+    size,
+    color,
+  });
+}
+
+function drawRightText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  y: number,
+  font: PDFFont,
+  size: number,
+  color = COLORS.text,
+) {
+  const textWidth = font.widthOfTextAtSize(text, size);
+
+  page.drawText(text, {
+    x: x - textWidth,
+    y,
+    font,
+    size,
+    color,
+  });
+}
+
+function drawSummaryCard(
+  page: PDFPage,
+  x: number,
+  yTop: number,
+  width: number,
+  height: number,
+  label: string,
+  value: string,
+  regularFont: PDFFont,
+  boldFont: PDFFont,
+  valueColor = COLORS.title,
+) {
+  page.drawRectangle({
+    x,
+    y: yTop - height,
+    width,
+    height,
+    color: COLORS.cardBg,
+    borderColor: COLORS.border,
+    borderWidth: 0.8,
+  });
+
+  drawCenteredText(page, label, x, yTop - 18, width, boldFont, 10, COLORS.subText);
+  drawCenteredText(page, value, x, yTop - 40, width, boldFont, 18, valueColor);
+}
+
+function drawTableHeader(
+  page: PDFPage,
+  startX: number,
+  yTop: number,
+  colWidths: number[],
+  headers: string[],
+  boldFont: PDFFont,
+) {
+  const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
+  const headerHeight = 24;
+
+  page.drawRectangle({
+    x: startX,
+    y: yTop - headerHeight,
+    width: totalWidth,
+    height: headerHeight,
+    color: COLORS.headerBg,
+    borderColor: COLORS.border,
+    borderWidth: 0.8,
+  });
+
+  let currentX = startX;
+
+  headers.forEach((header, index) => {
+    drawCenteredText(
+      page,
+      header,
+      currentX,
+      yTop - 18,
+      colWidths[index],
+      boldFont,
+      10,
+      COLORS.text,
+    );
+
+    if (index < headers.length - 1) {
+      page.drawLine({
+        start: { x: currentX + colWidths[index], y: yTop },
+        end: { x: currentX + colWidths[index], y: yTop - headerHeight },
+        thickness: 0.8,
+        color: COLORS.border,
+      });
+    }
+
+    currentX += colWidths[index];
+  });
+}
+
+function drawRowBorders(
   page: PDFPage,
   x: number,
   yTop: number,
@@ -167,7 +282,7 @@ function drawTableRowBorders(
     y: yTop - rowHeight,
     width: totalWidth,
     height: rowHeight,
-    borderColor: rgb(0.82, 0.84, 0.88),
+    borderColor: COLORS.border,
     borderWidth: 0.8,
   });
 
@@ -178,30 +293,29 @@ function drawTableRowBorders(
       start: { x: currentX, y: yTop },
       end: { x: currentX, y: yTop - rowHeight },
       thickness: 0.8,
-      color: rgb(0.82, 0.84, 0.88),
+      color: COLORS.border,
     });
   }
 }
 
-function drawCenteredHeaderText(
-  page: PDFPage,
-  text: string,
-  cellX: number,
-  cellY: number,
-  cellWidth: number,
-  font: PDFFont,
-  fontSize: number,
+function addNewPage(
+  pdfDoc: PDFDocument,
+  regularFont: PDFFont,
+  periodLabel: string,
 ) {
-  const textWidth = font.widthOfTextAtSize(text, fontSize);
-  const x = cellX + (cellWidth - textWidth) / 2;
+  const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
 
-  page.drawText(text, {
-    x,
-    y: cellY,
-    size: fontSize,
-    font,
-    color: rgb(0.22, 0.25, 0.3),
-  });
+  drawText(
+    page,
+    `보안 활동 ${periodLabel} 리포트`,
+    MARGIN_X,
+    TOP_Y,
+    regularFont,
+    10,
+    COLORS.subText,
+  );
+
+  return page;
 }
 
 export async function generateSecurityReportPdf({
@@ -221,127 +335,209 @@ export async function generateSecurityReportPdf({
   const regularFont = await pdfDoc.embedFont(regularFontBytes, { subset: true });
   const boldFont = await pdfDoc.embedFont(boldFontBytes, { subset: true });
 
+  const periodLabel = getReportPeriodLabel(reportType, year, quarter, half);
+
   let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let currentY = TOP_Y;
 
-  const title = `보안 활동 ${getReportPeriodLabel(reportType, year, quarter, half)} 리포트`;
+  const title = `보안 활동 ${periodLabel} 리포트`;
   const generatedAt = `생성일시: ${new Date().toLocaleString('ko-KR')}`;
 
-  const titleSize = 24;
+  const totalCount = records.length;
+  const completedCount = records.filter((record) => record.status === '완료').length;
+  const delayedOrIncompleteCount = records.filter((record) => record.status !== '완료').length;
+  const completionRate =
+    totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
+  const titleSize = 22;
   const titleWidth = boldFont.widthOfTextAtSize(title, titleSize);
   const titleX = (PAGE_WIDTH - titleWidth) / 2;
 
-  page.drawText(title, {
-    x: titleX,
-    y: currentY,
-    size: titleSize,
-    font: boldFont,
-    color: rgb(0.05, 0.09, 0.16),
-  });
-
-  currentY -= 34;
-
-  const generatedAtSize = 11;
-  const generatedAtWidth = regularFont.widthOfTextAtSize(generatedAt, generatedAtSize);
-
-  page.drawText(generatedAt, {
-    x: PAGE_WIDTH - MARGIN_X - generatedAtWidth,
-    y: currentY,
-    size: generatedAtSize,
-    font: regularFont,
-    color: rgb(0.32, 0.36, 0.42),
-  });
-
+  drawText(page, title, titleX, currentY, boldFont, titleSize, COLORS.title);
   currentY -= 28;
 
+  drawRightText(page, generatedAt, PAGE_WIDTH - MARGIN_X, currentY, regularFont, 10, COLORS.subText);
+  currentY -= 26;
+
+  drawText(page, '리포트 요약', MARGIN_X, currentY, boldFont, 13, COLORS.title);
+  currentY -= 10;
+
+  const gap = 6;
+  const cardHeight = 44;
+  const cardWidth = (PAGE_WIDTH - MARGIN_X * 2 - gap * 3) / 4;
+
+  drawSummaryCard(
+    page,
+    MARGIN_X,
+    currentY,
+    cardWidth,
+    cardHeight,
+    '전체 건수',
+    `${totalCount}건`,
+    regularFont,
+    boldFont,
+    COLORS.title,
+  );
+  drawSummaryCard(
+    page,
+    MARGIN_X + (cardWidth + gap) * 1,
+    currentY,
+    cardWidth,
+    cardHeight,
+    '수행 완료',
+    `${completedCount}건`,
+    regularFont,
+    boldFont,
+    COLORS.complete,
+  );
+  drawSummaryCard(
+    page,
+    MARGIN_X + (cardWidth + gap) * 2,
+    currentY,
+    cardWidth,
+    cardHeight,
+    '지연/미이행',
+    `${delayedOrIncompleteCount}건`,
+    regularFont,
+    boldFont,
+    COLORS.delayed,
+  );
+  drawSummaryCard(
+    page,
+    MARGIN_X + (cardWidth + gap) * 3,
+    currentY,
+    cardWidth,
+    cardHeight,
+    '전체 수행률',
+    `${completionRate}%`,
+    regularFont,
+    boldFont,
+    rgb(0.15, 0.35, 0.75),
+  );
+
+  currentY -= cardHeight + 26;
+
+  drawText(page, '보안 활동 상세 내역', MARGIN_X, currentY, boldFont, 13, COLORS.title);
+  currentY -= 12;
+
   const headers = ['활동명', '기한', '상태', '수행 내용', '증적 파일'];
-  const colWidths = [120, 72, 52, 145, 134];
-  const tableWidth = colWidths.reduce((sum, width) => sum + width, 0);
-  const tableX = (PAGE_WIDTH - tableWidth) / 2;
-  const headerHeight = 26;
-  const bodyFontSize = 10;
-  const headerFontSize = 10;
-  const lineHeight = bodyFontSize + 4;
+  const colWidths = [128, 72, 56, 150, 149];
+  const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
+  const tableX = MARGIN_X;
+  const headerHeight = 22;
+  const bodyFontSize = 8;
+  const lineHeight = 11;
 
-  for (const record of records) {
-    const values = [
-      record.title,
-      formatDueMonth(record.dueDate),
-      getStatusLabel(record.status),
-      record.executionNote?.trim() || '-',
-      getEvidenceText(evidenceFilesByRecord[record.id] ?? []),
-    ];
+  const ensureSpaceForRow = (requiredHeight: number) => {
+    if (currentY - headerHeight - requiredHeight >= BOTTOM_Y) {
+      return;
+    }
 
-    const lineCounts = values.map((value, index) =>
-      wrapText(value, regularFont, bodyFontSize, colWidths[index] - 10).length,
+    page = addNewPage(pdfDoc, regularFont, periodLabel);
+    currentY = TOP_Y - 20;
+
+    drawTableHeader(page, tableX, currentY, colWidths, headers, boldFont);
+    currentY -= headerHeight;
+  };
+
+  drawTableHeader(page, tableX, currentY, colWidths, headers, boldFont);
+  currentY -= headerHeight;
+
+  if (records.length === 0) {
+    const emptyHeight = 34;
+    drawRowBorders(page, tableX, currentY, emptyHeight, colWidths);
+    drawCenteredText(
+      page,
+      '선택한 조건에 해당하는 보안 활동이 없습니다.',
+      tableX,
+      currentY - 21,
+      totalWidth,
+      regularFont,
+      10,
+      COLORS.subText,
     );
+    currentY -= emptyHeight;
+  } else {
+    for (const record of records) {
+      const rowValues = [
+        record.title || '-',
+        formatDueMonth(record.dueDate),
+        getStatusLabel(record.status),
+        record.executionNote?.trim() || '-',
+        getEvidenceText(evidenceFilesByRecord[record.id] ?? []),
+      ];
 
-    const contentLineCount = Math.max(...lineCounts);
-    const bodyHeight = Math.max(30, contentLineCount * lineHeight + 10);
-    const requiredHeight = headerHeight + bodyHeight + 20;
-
-    const ensured = ensurePage(pdfDoc, page, currentY, requiredHeight, regularFont);
-    page = ensured.page;
-    currentY = ensured.currentY;
-
-    page.drawRectangle({
-      x: tableX,
-      y: currentY - headerHeight,
-      width: tableWidth,
-      height: headerHeight,
-      color: rgb(0.93, 0.94, 0.95),
-      borderColor: rgb(0.82, 0.84, 0.88),
-      borderWidth: 0.8,
-    });
-
-    let headerX = tableX;
-    headers.forEach((header, index) => {
-      drawCenteredHeaderText(
-        page,
-        header,
-        headerX,
-        currentY - 16,
-        colWidths[index],
-        boldFont,
-        headerFontSize,
+      const wrappedLines = rowValues.map((value, index) =>
+        wrapText(value, regularFont, bodyFontSize, colWidths[index] - 12),
       );
 
-      if (index < headers.length - 1) {
-        page.drawLine({
-          start: { x: headerX + colWidths[index], y: currentY },
-          end: { x: headerX + colWidths[index], y: currentY - headerHeight },
-          thickness: 0.8,
-          color: rgb(0.82, 0.84, 0.88),
-        });
-      }
+      const maxLineCount = Math.max(...wrappedLines.map((lines) => lines.length));
+      const rowHeight = Math.max(20, maxLineCount * lineHeight + 4);
 
-      headerX += colWidths[index];
-    });
+      ensureSpaceForRow(rowHeight);
 
-    const bodyTopY = currentY - headerHeight;
-    drawTableRowBorders(page, tableX, bodyTopY, bodyHeight, colWidths);
+      drawRowBorders(page, tableX, currentY, rowHeight, colWidths);
 
-    let cellX = tableX;
-    values.forEach((value, index) => {
-      const lines = wrapText(value, regularFont, bodyFontSize, colWidths[index] - 10);
-      let textY = bodyTopY - 15;
+      let currentX = tableX;
 
-      for (const line of lines) {
-        page.drawText(line, {
-          x: cellX + 5,
-          y: textY,
-          size: bodyFontSize,
-          font: regularFont,
-          color: index === 2 ? getStatusColor(record.status) : rgb(0.15, 0.18, 0.22),
-        });
-        textY -= lineHeight;
-      }
+      wrappedLines.forEach((lines, index) => {
+        const textBlockHeight = lines.length * lineHeight;
+        let textY = currentY - ((rowHeight - textBlockHeight) / 2) - 11;
 
-      cellX += colWidths[index];
-    });
+        if (index <= 2) {
+          const color = index === 2 ? getStatusColor(record.status) : COLORS.text;
 
-    currentY -= headerHeight + bodyHeight + 20;
+          lines.forEach((line) => {
+            drawCenteredText(
+              page,
+              line,
+              currentX,
+              textY,
+              colWidths[index],
+              index === 2 ? boldFont : regularFont,
+              bodyFontSize,
+              color,
+            );
+            textY -= lineHeight;
+          });
+        } else {
+          lines.forEach((line) => {
+            drawText(
+              page,
+              line,
+              currentX + 6,
+              textY,
+              regularFont,
+              bodyFontSize,
+              COLORS.text,
+            );
+            textY -= lineHeight;
+          });
+        }
+
+        currentX += colWidths[index];
+      });
+
+      currentY -= rowHeight;
+    }
   }
+
+  const pages = pdfDoc.getPages();
+  const totalPages = pages.length;
+
+  pages.forEach((page, index) => {
+    const pageNumber = `${index + 1} / ${totalPages}`;
+
+    const textWidth = regularFont.widthOfTextAtSize(pageNumber, 9);
+
+    page.drawText(pageNumber, {
+      x: (PAGE_WIDTH - textWidth) / 2,
+      y: 20,
+      size: 9,
+      font: regularFont,
+      color: COLORS.subText,
+    });
+  });
 
   const pdfBytes = await pdfDoc.save();
 

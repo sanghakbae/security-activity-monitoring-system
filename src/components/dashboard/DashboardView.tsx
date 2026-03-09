@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, Settings2 } from 'lucide-react';
 import type { DashboardTask } from '@/types';
 import { months } from '@/utils/date';
 import ActivityCard from '@/components/dashboard/ActivityCard';
@@ -19,6 +19,16 @@ type DashboardViewProps = {
   onClickCurrentMonthStat: () => void;
   onClickDoneStat: () => void;
   onClickDelayedStat: () => void;
+  dashboardPeriodStart: string;
+  dashboardPeriodEnd: string;
+  dashboardSettingsOpen: boolean;
+  draftDashboardPeriodStart: string;
+  draftDashboardPeriodEnd: string;
+  setDraftDashboardPeriodStart: (value: string) => void;
+  setDraftDashboardPeriodEnd: (value: string) => void;
+  onOpenDashboardSettings: () => void;
+  onCloseDashboardSettings: () => void;
+  onApplyDashboardSettings: () => void;
 };
 
 type CalendarMode = 'year' | 'range';
@@ -70,6 +80,12 @@ function getMonthsInQuarter(quarter: number) {
   if (quarter === 2) return [4, 5, 6];
   if (quarter === 3) return [7, 8, 9];
   return [10, 11, 12];
+}
+
+function formatPeriodLabel(start: string, end: string) {
+  const [startYear, startMonth] = start.split('-');
+  const [endYear, endMonth] = end.split('-');
+  return `${startYear}.${startMonth} ~ ${endYear}.${endMonth}`;
 }
 
 type StatCardProps = {
@@ -128,6 +144,16 @@ export default function DashboardView({
   onClickCurrentMonthStat,
   onClickDoneStat,
   onClickDelayedStat,
+  dashboardPeriodStart,
+  dashboardPeriodEnd,
+  dashboardSettingsOpen,
+  draftDashboardPeriodStart,
+  draftDashboardPeriodEnd,
+  setDraftDashboardPeriodStart,
+  setDraftDashboardPeriodEnd,
+  onOpenDashboardSettings,
+  onCloseDashboardSettings,
+  onApplyDashboardSettings,
 }: DashboardViewProps) {
   const [calendarMode, setCalendarMode] = useState<CalendarMode>('year');
   const [rangeStartYear, setRangeStartYear] = useState(currentYear - 1);
@@ -157,7 +183,7 @@ export default function DashboardView({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="전체 이행률" value={`${dashboardStats.rate}%`} />
+        <StatCard label="전체 수행률" value={`${dashboardStats.rate}%`} />
         <StatCard
           label="이번 달 대상"
           value={`${dashboardStats.currentMonthCount}건`}
@@ -179,6 +205,67 @@ export default function DashboardView({
           onClick={onClickDelayedStat}
         />
       </div>
+
+      <div className="flex flex-col items-end gap-2">
+        <div className="text-sm text-slate-500">
+          설정 기간: {formatPeriodLabel(dashboardPeriodStart, dashboardPeriodEnd)}
+        </div>
+        <button
+          type="button"
+          onClick={onOpenDashboardSettings}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm"
+        >
+          <Settings2 className="h-4 w-4" />
+          대시보드 기간 설정
+        </button>
+      </div>
+
+      {dashboardSettingsOpen && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 text-[16px] font-semibold">대시보드 설정</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-600">
+                시작 월
+              </label>
+              <input
+                type="month"
+                value={draftDashboardPeriodStart}
+                onChange={(e) => setDraftDashboardPeriodStart(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-600">
+                종료 월
+              </label>
+              <input
+                type="month"
+                value={draftDashboardPeriodEnd}
+                onChange={(e) => setDraftDashboardPeriodEnd(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onCloseDashboardSettings}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={onApplyDashboardSettings}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              적용
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-5">

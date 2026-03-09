@@ -24,6 +24,17 @@ function formatExecutionTargetPeriod(dueDate: string) {
   return `${year}년 ${month}월 활동`;
 }
 
+function toMonthKey(dateString: string) {
+  const date = new Date(dateString);
+  return date.getFullYear() * 100 + (date.getMonth() + 1);
+}
+
+function formatMonthInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  return `${year}-${month}`;
+}
+
 export default function DashboardPage({ userEmail, onLogout }: DashboardPageProps) {
   const [activeMenu, setActiveMenu] = useState<AppMenu>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -51,7 +62,6 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     setExecutionPage,
     catalogPage,
     setCatalogPage,
-    dashboardStats,
     filteredRecords,
     paginatedExecutionRecords,
     executionPageSize,
@@ -68,6 +78,15 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     markExecutionRecordComplete,
     loading,
   } = useSecurityActivityData();
+
+  const defaultStartMonth = useMemo(() => `${now.getFullYear()}-01`, [now]);
+  const defaultEndMonth = useMemo(() => formatMonthInputValue(now), [now]);
+
+  const [dashboardPeriodStart, setDashboardPeriodStart] = useState(defaultStartMonth);
+  const [dashboardPeriodEnd, setDashboardPeriodEnd] = useState(defaultEndMonth);
+  const [dashboardSettingsOpen, setDashboardSettingsOpen] = useState(false);
+  const [draftDashboardPeriodStart, setDraftDashboardPeriodStart] = useState(defaultStartMonth);
+  const [draftDashboardPeriodEnd, setDraftDashboardPeriodEnd] = useState(defaultEndMonth);
 
   const activeMenuLabel =
     activeMenu === 'dashboard'
@@ -104,15 +123,87 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     return formatExecutionTargetPeriod(registerExecutionRecord.dueDate);
   }, [registerExecutionRecord]);
 
+  const dashboardPeriodStartKey = useMemo(() => {
+    const [year, month] = dashboardPeriodStart.split('-').map(Number);
+    return year * 100 + month;
+  }, [dashboardPeriodStart]);
+
+  const dashboardPeriodEndKey = useMemo(() => {
+    const [year, month] = dashboardPeriodEnd.split('-').map(Number);
+    return year * 100 + month;
+  }, [dashboardPeriodEnd]);
+
+  const normalizedDashboardPeriod = useMemo(() => {
+    return {
+      startKey: Math.min(dashboardPeriodStartKey, dashboardPeriodEndKey),
+      endKey: Math.max(dashboardPeriodStartKey, dashboardPeriodEndKey),
+    };
+  }, [dashboardPeriodStartKey, dashboardPeriodEndKey]);
+
+  const dashboardStats = useMemo(() => {
+    const currentMonthKey = now.getFullYear() * 100 + (now.getMonth() + 1);
+
+    const recordsInPeriod = records.filter((record) => {
+      const recordMonthKey = toMonthKey(record.dueDate);
+      return (
+        recordMonthKey >= normalizedDashboardPeriod.startKey &&
+        recordMonthKey <= normalizedDashboardPeriod.endKey
+      );
+    });
+
+    const currentMonthRecords = recordsInPeriod.filter(
+      (record) => toMonthKey(record.dueDate) === currentMonthKey,
+    );
+
+    const doneCount = recordsInPeriod.filter((record) => record.status === '완료').length;
+    const delayedCount = recordsInPeriod.filter((record) => record.status === '지연').length;
+
+    const rate =
+      recordsInPeriod.length === 0
+        ? 0
+        : Math.round((doneCount / recordsInPeriod.length) * 100);
+
+    return {
+      currentMonthCount: currentMonthRecords.length,
+      doneCount,
+      delayedCount,
+      rate,
+    };
+  }, [records, now, normalizedDashboardPeriod]);
+
+  const filteredRecordsInDashboardPeriod = useMemo(() => {
+    return filteredRecords.filter((record) => {
+      const recordMonthKey = toMonthKey(record.dueDate);
+      return (
+        recordMonthKey >= normalizedDashboardPeriod.startKey &&
+        recordMonthKey <= normalizedDashboardPeriod.endKey
+      );
+    });
+  }, [filteredRecords, normalizedDashboardPeriod]);
+
+  const allExecutionRecordsInDashboardPeriod = useMemo(() => {
+    return records.filter((record) => {
+      const recordMonthKey = toMonthKey(record.dueDate);
+      return (
+        recordMonthKey >= normalizedDashboardPeriod.startKey &&
+        recordMonthKey <= normalizedDashboardPeriod.endKey
+      );
+    });
+  }, [records, normalizedDashboardPeriod]);
+
   const executionRecordsForView = useMemo(() => {
+    const baseSource =
+      keyword.trim() === '' ? allExecutionRecordsInDashboardPeriod : filteredRecordsInDashboardPeriod;
+
     if (executionFilterMode === 'all') {
-      return paginatedExecutionRecords;
+      const startIndex = (executionPage - 1) * executionPageSize;
+      return baseSource.slice(startIndex, startIndex + executionPageSize);
     }
 
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    const baseRecords = filteredRecords.filter((item) => {
+    const filteredByMode = baseSource.filter((item) => {
       if (executionFilterMode === 'done') {
         return item.status === '완료';
       }
@@ -130,25 +221,29 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     });
 
     const startIndex = (executionPage - 1) * executionPageSize;
-    return baseRecords.slice(startIndex, startIndex + executionPageSize);
+    return filteredByMode.slice(startIndex, startIndex + executionPageSize);
   }, [
+    keyword,
+    allExecutionRecordsInDashboardPeriod,
+    filteredRecordsInDashboardPeriod,
     executionFilterMode,
-    filteredRecords,
-    paginatedExecutionRecords,
     executionPage,
     executionPageSize,
     now,
   ]);
 
   const executionFilteredLengthForView = useMemo(() => {
+    const baseSource =
+      keyword.trim() === '' ? allExecutionRecordsInDashboardPeriod : filteredRecordsInDashboardPeriod;
+
     if (executionFilterMode === 'all') {
-      return filteredRecords.length;
+      return baseSource.length;
     }
 
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    return filteredRecords.filter((item) => {
+    return baseSource.filter((item) => {
       if (executionFilterMode === 'done') {
         return item.status === '완료';
       }
@@ -164,7 +259,13 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
 
       return true;
     }).length;
-  }, [executionFilterMode, filteredRecords, now]);
+  }, [
+    keyword,
+    allExecutionRecordsInDashboardPeriod,
+    filteredRecordsInDashboardPeriod,
+    executionFilterMode,
+    now,
+  ]);
 
   const executionTotalPagesForView = useMemo(() => {
     return Math.max(1, Math.ceil(executionFilteredLengthForView / executionPageSize));
@@ -195,6 +296,19 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     setKeyword('');
     setExecutionPage(1);
     setActiveMenu('execution');
+  };
+
+  const openDashboardSettings = () => {
+    setDraftDashboardPeriodStart(dashboardPeriodStart);
+    setDraftDashboardPeriodEnd(dashboardPeriodEnd);
+    setDashboardSettingsOpen(true);
+  };
+
+  const applyDashboardSettings = () => {
+    setDashboardPeriodStart(draftDashboardPeriodStart);
+    setDashboardPeriodEnd(draftDashboardPeriodEnd);
+    setExecutionPage(1);
+    setDashboardSettingsOpen(false);
   };
 
   const handleCreateNewMaster = () => {
@@ -372,6 +486,16 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 onClickCurrentMonthStat={openCurrentMonthActivities}
                 onClickDoneStat={openDoneActivities}
                 onClickDelayedStat={openDelayedActivities}
+                dashboardPeriodStart={dashboardPeriodStart}
+                dashboardPeriodEnd={dashboardPeriodEnd}
+                dashboardSettingsOpen={dashboardSettingsOpen}
+                draftDashboardPeriodStart={draftDashboardPeriodStart}
+                draftDashboardPeriodEnd={draftDashboardPeriodEnd}
+                setDraftDashboardPeriodStart={setDraftDashboardPeriodStart}
+                setDraftDashboardPeriodEnd={setDraftDashboardPeriodEnd}
+                onOpenDashboardSettings={openDashboardSettings}
+                onCloseDashboardSettings={() => setDashboardSettingsOpen(false)}
+                onApplyDashboardSettings={applyDashboardSettings}
               />
             )}
 
@@ -400,6 +524,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 setKeyword={(value) => {
                   setExecutionFilterMode('all');
                   setKeyword(value);
+                  setExecutionPage(1);
                 }}
                 paginatedExecutionRecords={executionRecordsForView}
                 filteredRecordsLength={executionFilteredLengthForView}
