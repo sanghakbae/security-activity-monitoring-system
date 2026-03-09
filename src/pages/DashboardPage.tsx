@@ -459,7 +459,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                     <div className="mb-3 text-[15px] font-semibold text-slate-800">수행 내역</div>
                     <textarea
                       value={registerExecutionRecord.executionNote ?? ''}
-                      onChange={(e) => onChangeExecutionNote(e.target.value)}
+                      onChange={(e) => setSelectedExecutionNote(e.target.value)}
                       disabled={isPlaceholderRegister}
                       className="h-52 w-full rounded-2xl border border-slate-200 px-5 py-4 text-[14px] outline-none placeholder:text-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
                       placeholder="해당 월(또는 분기/반기/연도)의 수행 내역을 입력하세요."
