@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'KoPubDotumMedium';
+  src: url('/fonts/KoPubDotumMedium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 html,
 body,
 #root {
@@ -11,6 +19,7 @@ body,
 body {
   margin: 0;
   font-family:
+    'KoPubDotumMedium',
     Inter,
     -apple-system,
     BlinkMacSystemFont,
@@ -18,6 +27,10 @@ body {
     Roboto,
     'Noto Sans KR',
     sans-serif;
+
+  font-size: 14px;   /* 전체 폰트 축소 */
+  line-height: 1.5;  /* 가독성 유지 */
+
   color: #0f172a;
 }
 
@@ -30,4 +43,19 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 600;
 }

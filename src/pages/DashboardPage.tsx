@@ -9,6 +9,7 @@ import RegisterPage from '@/pages/RegisterPage';
 import ExecutionPage from '@/pages/ExecutionPage';
 import ReportPage from '@/pages/ReportPage';
 import { useSecurityActivityData } from '@/hooks/useSecurityActivityData';
+import { supabase } from '@/lib/supabase';
 import type { AppMenu, ActivityMaster } from '@/types';
 import { formatNow } from '@/utils/date';
 
@@ -27,6 +28,9 @@ function formatExecutionTargetPeriod(dueDate: string) {
 export default function DashboardPage({ userEmail, onLogout }: DashboardPageProps) {
   const [activeMenu, setActiveMenu] = useState<AppMenu>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [executionFilterMode, setExecutionFilterMode] = useState<
+    'all' | 'currentMonth' | 'done' | 'delayed'
+  >('all');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
@@ -84,14 +88,104 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     return formatExecutionTargetPeriod(selectedExecutionRecord.dueDate);
   }, [selectedExecutionRecord]);
 
+  const executionRecordsForView = useMemo(() => {
+    if (executionFilterMode === 'all') {
+      return paginatedExecutionRecords;
+    }
+
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    const baseRecords = filteredRecords.filter((item) => {
+      if (executionFilterMode === 'done') {
+        return item.status === '완료';
+      }
+
+      if (executionFilterMode === 'delayed') {
+        return item.status === '지연';
+      }
+
+      if (executionFilterMode === 'currentMonth') {
+        const dueDate = new Date(item.dueDate);
+        return (
+          dueDate.getFullYear() === currentYear &&
+          dueDate.getMonth() + 1 === currentMonth
+        );
+      }
+
+      return true;
+    });
+
+    const startIndex = (executionPage - 1) * executionPageSize;
+    return baseRecords.slice(startIndex, startIndex + executionPageSize);
+  }, [
+    executionFilterMode,
+    filteredRecords,
+    paginatedExecutionRecords,
+    executionPage,
+    executionPageSize,
+    now,
+  ]);
+
+  const executionFilteredLengthForView = useMemo(() => {
+    if (executionFilterMode === 'all') {
+      return filteredRecords.length;
+    }
+
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    return filteredRecords.filter((item) => {
+      if (executionFilterMode === 'done') {
+        return item.status === '완료';
+      }
+
+      if (executionFilterMode === 'delayed') {
+        return item.status === '지연';
+      }
+
+      if (executionFilterMode === 'currentMonth') {
+        const dueDate = new Date(item.dueDate);
+        return (
+          dueDate.getFullYear() === currentYear &&
+          dueDate.getMonth() + 1 === currentMonth
+        );
+      }
+
+      return true;
+    }).length;
+  }, [executionFilterMode, filteredRecords, now]);
+
+  const executionTotalPagesForView = useMemo(() => {
+    return Math.max(
+      1,
+      Math.ceil(executionFilteredLengthForView / executionPageSize),
+    );
+  }, [executionFilteredLengthForView, executionPageSize]);
+
   const openExecutionRegistrationFromCalendar = (executionRecordId: string) => {
     setSelectedExecutionRecordId(executionRecordId);
     setActiveMenu('register');
   };
 
+  const openCurrentMonthActivities = () => {
+    setExecutionFilterMode('currentMonth');
+    setKeyword('');
+    setExecutionPage(1);
+    setActiveMenu('execution');
+  };
+
+  const openDoneActivities = () => {
+    setExecutionFilterMode('done');
+    setKeyword('');
+    setExecutionPage(1);
+    setActiveMenu('execution');
+  };
+
   const openDelayedActivities = () => {
     if (dashboardStats.delayedCount === 0) return;
-    setKeyword('지연');
+    setExecutionFilterMode('delayed');
+    setKeyword('');
     setExecutionPage(1);
     setActiveMenu('execution');
   };
@@ -210,27 +304,48 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     }
   };
 
-  const handleDelayedEmailAlert = () => {
+  const handleDelayedChatAlert = async () => {
     if (delayedRecords.length === 0) {
       window.alert('지연된 보안 활동이 없습니다.');
       return;
     }
 
-    const subject = `[보안활동 지연 알림] ${delayedRecords.length}건 조치 필요`;
-    const body = [
-      '지연된 보안 활동 목록입니다.',
-      '',
-      ...delayedRecords.map(
-        (item, index) =>
-          `${index + 1}. ${item.title} / ${item.ownerDepartment}${
-            item.partnerDepartment ? ` · ${item.partnerDepartment}` : ''
-          } / 기한 ${item.dueDate.slice(0, 7)}`,
-      ),
-      '',
-      '조속히 수행 내역 작성 및 증적 업로드를 진행해 주세요.',
-    ].join('\n');
+    if (!supabase) {
+      window.alert('Supabase 클라이언트가 초기화되지 않았습니다.');
+      return;
+    }
 
-    window.location.href = `mailto:${userEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      const { data, error } = await supabase.functions.invoke('send-delayed-alert');
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data?.error) {
+        throw new Error(
+          typeof data.detail === 'string'
+            ? `${data.error} - ${data.detail}`
+            : data.error,
+        );
+      }
+
+      const message =
+        typeof data?.message === 'string'
+          ? data.message
+          : 'Google Chat 알림이 전송되었습니다.';
+
+      window.alert(message);
+    } catch (error) {
+      console.error('send-delayed-alert invoke error:', error);
+
+      if (error instanceof Error) {
+        window.alert(`Google Chat 알림 오류: ${error.message}`);
+        return;
+      }
+
+      window.alert('Google Chat 알림 전송 중 오류가 발생했습니다.');
+    }
   };
 
   if (loading) {
@@ -255,7 +370,12 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
           sidebarCollapsed={sidebarCollapsed}
           setSidebarCollapsed={setSidebarCollapsed}
           activeMenu={activeMenu}
-          setActiveMenu={setActiveMenu}
+          setActiveMenu={(menu) => {
+            if (menu !== 'execution') {
+              setExecutionFilterMode('all');
+            }
+            setActiveMenu(menu);
+          }}
         />
 
         <main className="flex-1">
@@ -280,7 +400,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 currentYear={now.getFullYear()}
                 dashboardTasks={dashboardTasks}
                 openMasterFromCalendar={openExecutionRegistrationFromCalendar}
-                onDelayedEmailAlert={handleDelayedEmailAlert}
+                onClickCurrentMonthStat={openCurrentMonthActivities}
+                onClickDoneStat={openDoneActivities}
+                onClickDelayedStat={openDelayedActivities}
               />
             )}
 
@@ -318,12 +440,15 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
             {activeMenu === 'execution' && (
               <ExecutionPage
                 keyword={keyword}
-                setKeyword={setKeyword}
-                paginatedExecutionRecords={paginatedExecutionRecords}
-                filteredRecordsLength={filteredRecords.length}
+                setKeyword={(value) => {
+                  setExecutionFilterMode('all');
+                  setKeyword(value);
+                }}
+                paginatedExecutionRecords={executionRecordsForView}
+                filteredRecordsLength={executionFilteredLengthForView}
                 executionPageSize={executionPageSize}
                 executionPage={executionPage}
-                executionTotalPages={executionTotalPages}
+                executionTotalPages={executionTotalPagesForView}
                 setExecutionPage={setExecutionPage}
                 onSelect={(executionRecordId) => {
                   setSelectedExecutionRecordId(executionRecordId);

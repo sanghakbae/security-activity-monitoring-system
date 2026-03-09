@@ -1,8 +1,8 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import type { ExecutionEvidenceFile, ExecutionRecord } from '@/types';
 
-type ReportType = 'quarter' | 'half' | 'year';
+type ReportType = 'adHoc' | 'quarter' | 'half' | 'year';
 
 type GenerateSecurityReportPdfParams = {
   reportType: ReportType;
@@ -13,16 +13,13 @@ type GenerateSecurityReportPdfParams = {
   evidenceFilesByRecord: Record<string, ExecutionEvidenceFile[]>;
 };
 
-function formatDepartmentLabel(
-  ownerDepartment: string,
-  partnerDepartment: string | null,
-) {
-  if (partnerDepartment && partnerDepartment.trim() !== '') {
-    return `${ownerDepartment} · ${partnerDepartment}`;
-  }
-
-  return ownerDepartment;
-}
+const PAGE_WIDTH = 595.28;
+const PAGE_HEIGHT = 841.89;
+const MARGIN_X = 36;
+const TOP_Y = PAGE_HEIGHT - 42;
+const BOTTOM_Y = 42;
+const FONT_REGULAR_URL = `${import.meta.env.BASE_URL}fonts/KoPubDotumMedium.ttf`;
+const FONT_BOLD_URL = `${import.meta.env.BASE_URL}fonts/KoPubDotumBold.ttf`;
 
 function getReportPeriodLabel(
   reportType: ReportType,
@@ -30,6 +27,10 @@ function getReportPeriodLabel(
   quarter?: number,
   half?: number,
 ) {
+  if (reportType === 'adHoc') {
+    return `${year}년 수시`;
+  }
+
   if (reportType === 'quarter') {
     return `${year}년 ${quarter}분기`;
   }
@@ -55,15 +56,151 @@ function getStatusLabel(status: ExecutionRecord['status']) {
   }
 }
 
-async function loadImageDataUrl(url: string) {
-  const response = await fetch(url);
-  const blob = await response.blob();
+function getStatusColor(status: ExecutionRecord['status']) {
+  switch (status) {
+    case '완료':
+      return rgb(0.05, 0.55, 0.25);
+    case '지연':
+      return rgb(0.82, 0.18, 0.18);
+    case '진행중':
+      return rgb(0.12, 0.38, 0.82);
+    case '예약':
+    default:
+      return rgb(0.20, 0.48, 0.18);
+  }
+}
 
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+function formatDueMonth(dueDate: string) {
+  const date = new Date(dueDate);
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+}
+
+async function loadFontBytes(url: string) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`폰트 파일을 불러오지 못했습니다: ${url}`);
+  }
+
+  return await response.arrayBuffer();
+}
+
+function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number) {
+  const source = text && text.trim() !== '' ? text : '-';
+  const paragraphs = source.split('\n');
+  const lines: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (paragraph === '') {
+      lines.push('');
+      continue;
+    }
+
+    let current = '';
+
+    for (const char of paragraph) {
+      const candidate = current + char;
+      const width = font.widthOfTextAtSize(candidate, fontSize);
+
+      if (width > maxWidth && current !== '') {
+        lines.push(current);
+        current = char;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (current !== '') {
+      lines.push(current);
+    }
+  }
+
+  return lines.length > 0 ? lines : ['-'];
+}
+
+function ensurePage(
+  pdfDoc: PDFDocument,
+  page: PDFPage,
+  currentY: number,
+  requiredHeight: number,
+  regularFont: PDFFont,
+) {
+  if (currentY - requiredHeight >= BOTTOM_Y) {
+    return { page, currentY };
+  }
+
+  const newPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+
+  newPage.drawText('보안 활동 리포트', {
+    x: MARGIN_X,
+    y: TOP_Y,
+    size: 10,
+    font: regularFont,
+    color: rgb(0.45, 0.48, 0.54),
+  });
+
+  return {
+    page: newPage,
+    currentY: TOP_Y - 20,
+  };
+}
+
+function getEvidenceText(files: ExecutionEvidenceFile[]) {
+  if (files.length === 0) {
+    return '증적 없음';
+  }
+
+  return files.map((file, index) => `${index + 1}. ${file.fileName}`).join('\n');
+}
+
+function drawTableRowBorders(
+  page: PDFPage,
+  x: number,
+  yTop: number,
+  rowHeight: number,
+  colWidths: number[],
+) {
+  const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
+
+  page.drawRectangle({
+    x,
+    y: yTop - rowHeight,
+    width: totalWidth,
+    height: rowHeight,
+    borderColor: rgb(0.82, 0.84, 0.88),
+    borderWidth: 0.8,
+  });
+
+  let currentX = x;
+  for (let i = 0; i < colWidths.length - 1; i += 1) {
+    currentX += colWidths[i];
+    page.drawLine({
+      start: { x: currentX, y: yTop },
+      end: { x: currentX, y: yTop - rowHeight },
+      thickness: 0.8,
+      color: rgb(0.82, 0.84, 0.88),
+    });
+  }
+}
+
+function drawCenteredHeaderText(
+  page: PDFPage,
+  text: string,
+  cellX: number,
+  cellY: number,
+  cellWidth: number,
+  font: PDFFont,
+  fontSize: number,
+) {
+  const textWidth = font.widthOfTextAtSize(text, fontSize);
+  const x = cellX + (cellWidth - textWidth) / 2;
+
+  page.drawText(text, {
+    x,
+    y: cellY,
+    size: fontSize,
+    font,
+    color: rgb(0.22, 0.25, 0.30),
   });
 }
 
@@ -75,161 +212,152 @@ export async function generateSecurityReportPdf({
   records,
   evidenceFilesByRecord,
 }: GenerateSecurityReportPdfParams) {
-  const doc = new jsPDF({
-    orientation: 'p',
-    unit: 'mm',
-    format: 'a4',
-  });
+  const pdfDoc = await PDFDocument.create();
+  pdfDoc.registerFontkit(fontkit);
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const marginX = 14;
-  let cursorY = 18;
+  const regularFontBytes = await loadFontBytes(FONT_REGULAR_URL);
+  const boldFontBytes = await loadFontBytes(FONT_BOLD_URL);
+
+  const regularFont = await pdfDoc.embedFont(regularFontBytes, { subset: true });
+  const boldFont = await pdfDoc.embedFont(boldFontBytes, { subset: true });
+
+  let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  let currentY = TOP_Y;
 
   const title = `보안 활동 ${getReportPeriodLabel(reportType, year, quarter, half)} 리포트`;
-  const generatedAt = new Date().toLocaleString('ko-KR');
+  const generatedAt = `생성일시: ${new Date().toLocaleString('ko-KR')}`;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text(title, marginX, cursorY);
+  const titleSize = 24;
+  const titleWidth = boldFont.widthOfTextAtSize(title, titleSize);
+  const titleX = (PAGE_WIDTH - titleWidth) / 2;
 
-  cursorY += 8;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text(`생성 일시: ${generatedAt}`, marginX, cursorY);
-
-  cursorY += 8;
-
-  autoTable(doc, {
-    startY: cursorY,
-    head: [['활동명', '부서', '기한', '상태', '증적 수']],
-    body: records.map((record) => [
-      record.title,
-      formatDepartmentLabel(record.ownerDepartment, record.partnerDepartment),
-      record.dueDate,
-      getStatusLabel(record.status),
-      String((evidenceFilesByRecord[record.id] ?? []).length),
-    ]),
-    theme: 'grid',
-    styles: {
-      font: 'helvetica',
-      fontSize: 9,
-      cellPadding: 2.5,
-      lineColor: [220, 226, 232],
-      lineWidth: 0.1,
-    },
-    headStyles: {
-      fillColor: [15, 23, 42],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-    },
-    margin: { left: marginX, right: marginX },
+  page.drawText(title, {
+    x: titleX,
+    y: currentY,
+    size: titleSize,
+    font: boldFont,
+    color: rgb(0.05, 0.09, 0.16),
   });
 
-  cursorY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 40;
-  cursorY += 8;
+  currentY -= 34;
+
+  const generatedAtSize = 11;
+  const generatedAtWidth = regularFont.widthOfTextAtSize(generatedAt, generatedAtSize);
+
+  page.drawText(generatedAt, {
+    x: PAGE_WIDTH - MARGIN_X - generatedAtWidth,
+    y: currentY,
+    size: generatedAtSize,
+    font: regularFont,
+    color: rgb(0.32, 0.36, 0.42),
+  });
+
+  currentY -= 28;
+
+  const headers = ['활동명', '기한', '상태', '수행 내용', '증적 파일'];
+  const colWidths = [120, 72, 52, 145, 134];
+  const tableWidth = colWidths.reduce((sum, width) => sum + width, 0);
+  const tableX = (PAGE_WIDTH - tableWidth) / 2;
+  const headerHeight = 26;
+  const bodyFontSize = 10;
+  const headerFontSize = 10;
+  const lineHeight = bodyFontSize + 4;
 
   for (const record of records) {
-    const evidenceFiles = evidenceFilesByRecord[record.id] ?? [];
+    const values = [
+      record.title,
+      formatDueMonth(record.dueDate),
+      getStatusLabel(record.status),
+      record.executionNote?.trim() || '-',
+      getEvidenceText(evidenceFilesByRecord[record.id] ?? []),
+    ];
 
-    if (cursorY > 240) {
-      doc.addPage();
-      cursorY = 18;
-    }
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text(record.title, marginX, cursorY);
-    cursorY += 6;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(
-      `부서: ${formatDepartmentLabel(record.ownerDepartment, record.partnerDepartment)}`,
-      marginX,
-      cursorY,
+    const lineCounts = values.map((value, index) =>
+      wrapText(value, regularFont, bodyFontSize, colWidths[index] - 10).length,
     );
-    cursorY += 5;
-    doc.text(`기한: ${record.dueDate}`, marginX, cursorY);
-    cursorY += 5;
-    doc.text(`상태: ${getStatusLabel(record.status)}`, marginX, cursorY);
-    cursorY += 5;
-    doc.text(`수행 내역: ${record.executionNote?.trim() || '-'}`, marginX, cursorY);
-    cursorY += 8;
 
-    if (evidenceFiles.length === 0) {
-      doc.setTextColor(120, 120, 120);
-      doc.text('증적 없음', marginX, cursorY);
-      doc.setTextColor(0, 0, 0);
-      cursorY += 10;
-      continue;
-    }
+    const contentLineCount = Math.max(...lineCounts);
+    const bodyHeight = Math.max(30, contentLineCount * lineHeight + 10);
+    const requiredHeight = headerHeight + bodyHeight + 20;
 
-    const thumbWidth = 54;
-    const thumbHeight = 38;
-    const gap = 6;
-    const itemsPerRow = 3;
+    const ensured = ensurePage(pdfDoc, page, currentY, requiredHeight, regularFont);
+    page = ensured.page;
+    currentY = ensured.currentY;
 
-    for (let i = 0; i < evidenceFiles.length; i += 1) {
-      const file = evidenceFiles[i];
-      const columnIndex = i % itemsPerRow;
-      const rowIndex = Math.floor(i / itemsPerRow);
+    page.drawRectangle({
+      x: tableX,
+      y: currentY - headerHeight,
+      width: tableWidth,
+      height: headerHeight,
+      color: rgb(0.93, 0.94, 0.95),
+      borderColor: rgb(0.82, 0.84, 0.88),
+      borderWidth: 0.8,
+    });
 
-      const x = marginX + columnIndex * (thumbWidth + gap);
-      const y = cursorY + rowIndex * (thumbHeight + 14);
+    let headerX = tableX;
+    headers.forEach((header, index) => {
+      drawCenteredHeaderText(
+        page,
+        header,
+        headerX,
+        currentY - 16,
+        colWidths[index],
+        boldFont,
+        headerFontSize,
+      );
 
-      if (y + thumbHeight + 14 > 285) {
-        doc.addPage();
-        cursorY = 18;
-
-        const newRowIndex = 0;
-        const newY = cursorY + newRowIndex * (thumbHeight + 14);
-
-        if (file.thumbnailUrl) {
-          try {
-            const imageDataUrl = await loadImageDataUrl(file.thumbnailUrl);
-            doc.addImage(imageDataUrl, 'JPEG', x, newY, thumbWidth, thumbHeight);
-          } catch {
-            doc.rect(x, newY, thumbWidth, thumbHeight);
-            doc.setFontSize(8);
-            doc.text('미리보기 없음', x + 14, newY + 20);
-          }
-        } else {
-          doc.rect(x, newY, thumbWidth, thumbHeight);
-          doc.setFontSize(8);
-          doc.text('미리보기 없음', x + 14, newY + 20);
-        }
-
-        doc.setFontSize(8);
-        doc.text(file.fileName, x, newY + thumbHeight + 4, { maxWidth: thumbWidth });
-        continue;
+      if (index < headers.length - 1) {
+        page.drawLine({
+          start: { x: headerX + colWidths[index], y: currentY },
+          end: { x: headerX + colWidths[index], y: currentY - headerHeight },
+          thickness: 0.8,
+          color: rgb(0.82, 0.84, 0.88),
+        });
       }
 
-      if (file.thumbnailUrl) {
-        try {
-          const imageDataUrl = await loadImageDataUrl(file.thumbnailUrl);
-          doc.addImage(imageDataUrl, 'JPEG', x, y, thumbWidth, thumbHeight);
-        } catch {
-          doc.rect(x, y, thumbWidth, thumbHeight);
-          doc.setFontSize(8);
-          doc.text('미리보기 없음', x + 14, y + 20);
-        }
-      } else {
-        doc.rect(x, y, thumbWidth, thumbHeight);
-        doc.setFontSize(8);
-        doc.text('미리보기 없음', x + 14, y + 20);
+      headerX += colWidths[index];
+    });
+
+    const bodyTopY = currentY - headerHeight;
+    drawTableRowBorders(page, tableX, bodyTopY, bodyHeight, colWidths);
+
+    let cellX = tableX;
+    values.forEach((value, index) => {
+      const lines = wrapText(value, regularFont, bodyFontSize, colWidths[index] - 10);
+      let textY = bodyTopY - 15;
+
+      for (const line of lines) {
+        page.drawText(line, {
+          x: cellX + 5,
+          y: textY,
+          size: bodyFontSize,
+          font: regularFont,
+          color:
+            index === 2
+              ? getStatusColor(record.status)
+              : rgb(0.15, 0.18, 0.22),
+        });
+        textY -= lineHeight;
       }
 
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.text(file.fileName, x, y + thumbHeight + 4, { maxWidth: thumbWidth });
-    }
+      cellX += colWidths[index];
+    });
 
-    cursorY += Math.ceil(evidenceFiles.length / itemsPerRow) * (thumbHeight + 14) + 4;
+    currentY -= headerHeight + bodyHeight + 20;
   }
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
 
   const fileName = `security-report-${reportType}-${year}${quarter ? `-q${quarter}` : ''}${
     half ? `-h${half}` : ''
   }.pdf`;
 
-  doc.save(fileName);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+
+  URL.revokeObjectURL(url);
 }

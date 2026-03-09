@@ -25,19 +25,31 @@ Deno.serve(async () => {
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const googleChatWebhookUrl = Deno.env.get('GOOGLE_CHAT_WEBHOOK_URL') ?? '';
 
+    console.log('[send-delayed-alert] function started');
+
     if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error('[send-delayed-alert] missing supabase env');
       return new Response(
         JSON.stringify({ error: 'Supabase 환경변수가 설정되지 않았습니다.' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        },
       );
     }
 
     if (!googleChatWebhookUrl) {
+      console.error('[send-delayed-alert] missing GOOGLE_CHAT_WEBHOOK_URL');
       return new Response(
         JSON.stringify({ error: 'GOOGLE_CHAT_WEBHOOK_URL이 설정되지 않았습니다.' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        },
       );
     }
+
+    console.log('[send-delayed-alert] webhook configured');
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
@@ -48,18 +60,26 @@ Deno.serve(async () => {
       .order('due_date', { ascending: true });
 
     if (error) {
+      console.error('[send-delayed-alert] query error:', error.message);
       return new Response(
         JSON.stringify({ error: error.message }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        },
       );
     }
 
     const delayedRecords = (data ?? []) as DelayedRecord[];
+    console.log(`[send-delayed-alert] delayed record count: ${delayedRecords.length}`);
 
     if (delayedRecords.length === 0) {
       return new Response(
         JSON.stringify({ message: '지연된 보안 활동이 없습니다.' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
       );
     }
 
@@ -69,32 +89,46 @@ Deno.serve(async () => {
         item.partner_department,
       );
 
-      return `${index + 1}. ${item.title} / ${departmentLabel} / 기한 ${String(
-        item.due_date,
-      ).slice(0, 7)}`;
+      const dueMonth = String(item.due_date).slice(0, 7);
+
+      return `${index + 1}. ${item.title} / ${departmentLabel} / 활동월 ${dueMonth}`;
     });
 
-    const message = {
-      text: `보안 활동 지연 알림\n\n총 ${delayedRecords.length}건의 지연 활동이 있습니다.\n\n${lines.join('\n')}`,
-    };
+    const messageText = [
+      '보안 활동 지연 알림',
+      '',
+      `총 ${delayedRecords.length}건의 지연 활동이 있습니다.`,
+      '',
+      ...lines,
+    ].join('\n');
+
+    console.log('[send-delayed-alert] sending message to google chat');
 
     const chatResponse = await fetch(googleChatWebhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(message),
+      body: JSON.stringify({
+        text: messageText,
+      }),
     });
 
-    if (!chatResponse.ok) {
-      const chatText = await chatResponse.text();
+    const chatResponseText = await chatResponse.text();
+    console.log('[send-delayed-alert] google chat status:', chatResponse.status);
+    console.log('[send-delayed-alert] google chat response:', chatResponseText);
 
+    if (!chatResponse.ok) {
       return new Response(
         JSON.stringify({
           error: 'Google Chat 전송 실패',
-          detail: chatText,
+          detail: chatResponseText,
+          status: chatResponse.status,
         }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        },
       );
     }
 
@@ -103,14 +137,22 @@ Deno.serve(async () => {
         message: 'Google Chat 알림 전송 완료',
         count: delayedRecords.length,
       }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
     );
   } catch (error) {
+    console.error('[send-delayed-alert] unexpected error:', error);
+
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      },
     );
   }
 });

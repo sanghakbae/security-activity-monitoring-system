@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, CalendarDays } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import type { DashboardTask } from '@/types';
 import { months } from '@/utils/date';
 import ActivityCard from '@/components/dashboard/ActivityCard';
@@ -16,7 +16,9 @@ type DashboardViewProps = {
   currentYear: number;
   dashboardTasks: DashboardTask[];
   openMasterFromCalendar: (executionRecordId: string) => void;
-  onDelayedEmailAlert: () => void;
+  onClickCurrentMonthStat: () => void;
+  onClickDoneStat: () => void;
+  onClickDelayedStat: () => void;
 };
 
 type CalendarMode = 'year' | 'range';
@@ -70,6 +72,52 @@ function getMonthsInQuarter(quarter: number) {
   return [10, 11, 12];
 }
 
+type StatCardProps = {
+  label: string;
+  value: string;
+  accentClassName?: string;
+  clickable?: boolean;
+  onClick?: () => void;
+};
+
+function StatCard({
+  label,
+  value,
+  accentClassName = 'text-slate-900',
+  clickable = false,
+  onClick,
+}: StatCardProps) {
+  const baseClassName =
+    'rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm';
+  const interactiveClassName = clickable
+    ? 'cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md'
+    : '';
+
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${baseClassName} ${interactiveClassName} w-full text-center`}
+      >
+        <div className="text-sm font-medium text-slate-500">{label}</div>
+        <div className={`mt-2 text-[34px] font-bold leading-none ${accentClassName}`}>
+          {value}
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div className={`${baseClassName} text-center`}>
+      <div className="text-sm font-medium text-slate-500">{label}</div>
+      <div className={`mt-2 text-[34px] font-bold leading-none ${accentClassName}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardView({
   dashboardStats,
   currentDateTime,
@@ -77,7 +125,9 @@ export default function DashboardView({
   currentYear,
   dashboardTasks,
   openMasterFromCalendar,
-  onDelayedEmailAlert,
+  onClickCurrentMonthStat,
+  onClickDoneStat,
+  onClickDelayedStat,
 }: DashboardViewProps) {
   const [calendarMode, setCalendarMode] = useState<CalendarMode>('year');
   const [rangeStartYear, setRangeStartYear] = useState(currentYear - 1);
@@ -106,50 +156,28 @@ export default function DashboardView({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-rose-600">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
-            <AlertCircle className="mt-0.5 h-6 w-6 shrink-0" />
-            <div className="font-semibold">
-              지연된 보안 활동이 {dashboardStats.delayedCount}건 있습니다.
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onDelayedEmailAlert}
-            className="rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600"
-          >
-            지연 메일 발송
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm">
-          <div className="text-sm text-slate-500">전체 이행률</div>
-          <div className="mt-3 text-[46px] font-bold text-slate-900">
-            {dashboardStats.rate}%
-          </div>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm">
-          <div className="text-sm text-slate-500">이번 달 대상</div>
-          <div className="mt-3 text-[46px] font-bold">
-            {dashboardStats.currentMonthCount}건
-          </div>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm">
-          <div className="text-sm text-slate-500">승인 완료</div>
-          <div className="mt-3 text-[46px] font-bold text-sky-600">
-            {dashboardStats.doneCount}건
-          </div>
-        </div>
-        <div className="rounded-2xl border border-rose-200 bg-white px-5 py-6 shadow-sm">
-          <div className="text-sm text-slate-500">지연/미이행</div>
-          <div className="mt-3 text-[46px] font-bold text-rose-500">
-            {dashboardStats.delayedCount}건
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="전체 이행률" value={`${dashboardStats.rate}%`} />
+        <StatCard
+          label="이번 달 대상"
+          value={`${dashboardStats.currentMonthCount}건`}
+          clickable
+          onClick={onClickCurrentMonthStat}
+        />
+        <StatCard
+          label="수행 완료"
+          value={`${dashboardStats.doneCount}건`}
+          accentClassName="text-sky-600"
+          clickable
+          onClick={onClickDoneStat}
+        />
+        <StatCard
+          label="지연/미이행"
+          value={`${dashboardStats.delayedCount}건`}
+          accentClassName="text-rose-500"
+          clickable
+          onClick={onClickDelayedStat}
+        />
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -159,6 +187,7 @@ export default function DashboardView({
               <CalendarDays className="h-5 w-5 text-slate-900" />
               <h2 className="text-[18px] font-semibold">보안 활동 캘린더</h2>
             </div>
+
             <div className="text-sm font-medium text-slate-500">
               {currentDateTime}
             </div>
@@ -177,6 +206,7 @@ export default function DashboardView({
               >
                 연간 보기
               </button>
+
               <button
                 type="button"
                 onClick={() => setCalendarMode('range')}
@@ -249,7 +279,7 @@ export default function DashboardView({
         </div>
 
         {calendarMode === 'year' && (
-          <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-6 lg:p-5">
+          <div className="grid grid-cols-2 gap-2 p-3 lg:grid-cols-6 lg:p-3">
             {months.map((label, monthIndex) => {
               const monthTasks = annualTasks.filter(
                 (task) => getTaskMonth(task) === monthIndex + 1,
@@ -258,10 +288,10 @@ export default function DashboardView({
               return (
                 <div
                   key={`${currentYear}-${label}`}
-                  className="rounded-2xl border border-slate-200 bg-slate-50/70"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70"
                 >
                   <div
-                    className={`rounded-t-2xl border-b border-slate-200 px-4 py-3 text-center font-semibold ${
+                    className={`border-b border-slate-200 px-4 py-3 text-center font-semibold ${
                       currentMonth === monthIndex + 1
                         ? 'bg-slate-900 text-white'
                         : 'bg-slate-100 text-slate-900'
@@ -271,13 +301,13 @@ export default function DashboardView({
                     {currentMonth === monthIndex + 1 ? ' (현재월)' : ''}
                   </div>
 
-                  <div className="min-h-[160px] p-3">
+                  <div className="min-h-[120px] p-2">
                     {monthTasks.length === 0 ? (
-                      <div className="flex h-[120px] items-center justify-center text-sm text-slate-400">
+                      <div className="flex h-[100px] items-center justify-center text-sm text-slate-400">
                         일정 없음
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
                         {monthTasks.map((task) => (
                           <ActivityCard
                             key={task.id}
@@ -303,16 +333,14 @@ export default function DashboardView({
             ) : (
               <div className="space-y-4">
                 {quarterBlocks.map((block) => {
-                  const quarterMonths = [1, 2, 3, 4].includes(block.quarter)
-                    ? getMonthsInQuarter(block.quarter)
-                    : [];
+                  const quarterMonths = getMonthsInQuarter(block.quarter);
 
                   return (
                     <div
                       key={`${block.year}-Q${block.quarter}`}
                       className="rounded-2xl border border-slate-200 bg-slate-50/70"
                     >
-                      <div className="rounded-t-2xl border-b border-slate-200 bg-slate-100 px-4 py-3 text-center font-semibold text-slate-900">
+                      <div className="border-b border-slate-200 bg-slate-100 px-4 py-3 text-center font-semibold text-slate-900">
                         {block.year}년 {block.quarter}분기
                       </div>
 
@@ -327,19 +355,19 @@ export default function DashboardView({
                           return (
                             <div
                               key={`${block.year}-${month}`}
-                              className="rounded-2xl border border-slate-200 bg-white"
+                              className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
                             >
-                              <div className="rounded-t-2xl border-b border-slate-200 bg-slate-50 px-4 py-3 text-center text-sm font-semibold text-slate-800">
+                              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-center text-sm font-semibold text-slate-800">
                                 {month}월
                               </div>
 
-                              <div className="min-h-[160px] p-3">
+                              <div className="min-h-[120px] p-2">
                                 {monthTasks.length === 0 ? (
                                   <div className="flex h-[100px] items-center justify-center text-sm text-slate-400">
                                     일정 없음
                                   </div>
                                 ) : (
-                                  <div className="grid grid-cols-2 gap-2">
+                                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
                                     {monthTasks.map((task) => (
                                       <ActivityCard
                                         key={task.id}
