@@ -279,7 +279,7 @@ export default function DashboardView({
         </div>
 
         {calendarMode === 'year' && (
-          <div className="grid grid-cols-2 gap-2 p-3 lg:grid-cols-6 lg:p-3">
+          <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             {months.map((label, monthIndex) => {
               const monthTasks = annualTasks.filter(
                 (task) => getTaskMonth(task) === monthIndex + 1,
@@ -307,7 +307,7 @@ export default function DashboardView({
                         일정 없음
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
+                      <div className="grid grid-cols-1 gap-1 min-[1800px]:grid-cols-2">
                         {monthTasks.map((task) => (
                           <ActivityCard
                             key={task.id}
@@ -344,7 +344,7 @@ export default function DashboardView({
                         {block.year}년 {block.quarter}분기
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-3 p-3 xl:grid-cols-3">
                         {quarterMonths.map((month) => {
                           const monthTasks = dashboardTasks.filter(
                             (task) =>
@@ -367,7 +367,7 @@ export default function DashboardView({
                                     일정 없음
                                   </div>
                                 ) : (
-                                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
+                                  <div className="grid grid-cols-1 gap-1 min-[1800px]:grid-cols-2">
                                     {monthTasks.map((task) => (
                                       <ActivityCard
                                         key={task.id}
