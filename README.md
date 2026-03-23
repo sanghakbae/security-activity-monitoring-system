@@ -191,6 +191,34 @@ Deployment
 
 ------------------------------------------------------------------------
 
+# 지연 알림 자동 실행 설정
+
+Google Chat 지연 알림은 `send-delayed-alert` Edge Function을
+GitHub Actions 스케줄러로 자동 호출합니다.
+
+## 1. GitHub Secrets 추가
+
+저장소 `Settings > Secrets and variables > Actions`에서 아래 2개를 추가합니다.
+
+- `SUPABASE_FUNCTIONS_BASE_URL`  
+  예: `https://<project-ref>.supabase.co/functions/v1`
+- `SUPABASE_SERVICE_ROLE_KEY`  
+  Supabase 프로젝트의 Service Role Key
+
+## 2. 동작 시간
+
+워크플로 파일: `.github/workflows/delayed-alert.yml`  
+기본 스케줄: **평일 13:00, 17:00 KST** (UTC `0 4,8 * * 1-5`)
+
+필요 시 `cron` 표현식을 수정해 주기를 변경할 수 있습니다.
+
+## 3. 수동 테스트
+
+GitHub Actions 탭에서 `Send Delayed Alert` 워크플로를 `Run workflow`로
+수동 실행해 동작을 검증할 수 있습니다.
+
+------------------------------------------------------------------------
+
 # 배포
 
 GitHub Pages 기반 자동 배포

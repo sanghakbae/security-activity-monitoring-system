@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import type { ExecutionEvidenceFile, ExecutionRecord } from '@/types';
-import { generateSecurityReportPdf } from '@/utils/report';
 
 type ReportType = 'adHoc' | 'quarter' | 'half' | 'year';
 
@@ -66,6 +65,7 @@ export default function ReportPage({
   const handleGeneratePdf = async () => {
     try {
       setIsGenerating(true);
+      const { generateSecurityReportPdf } = await import('@/utils/report');
 
       await generateSecurityReportPdf({
         reportType,

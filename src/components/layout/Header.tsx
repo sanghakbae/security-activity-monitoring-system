@@ -16,9 +16,9 @@ export default function Header({
   onLogout,
 }: HeaderProps) {
   return (
-    <header className="hidden border-b border-slate-200 bg-white lg:flex">
+    <header className="hidden bg-slate-100 lg:flex">
       <div className="flex w-full items-center justify-between px-6 py-4">
-        <h1 className="text-[20px] font-semibold text-slate-900">{activeMenuLabel}</h1>
+        <h1 className="text-[22px] font-semibold text-slate-900">{activeMenuLabel}</h1>
 
         <div className="flex items-center gap-3">
           <button

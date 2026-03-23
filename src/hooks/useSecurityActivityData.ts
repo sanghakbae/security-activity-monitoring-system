@@ -134,17 +134,7 @@ export function useSecurityActivityData() {
   const syncDelayedStatuses = async () => {
     if (!supabase) return;
 
-    const today = new Date();
-    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const currentMonthStartText = `${currentMonthStart.getFullYear()}-${String(
-      currentMonthStart.getMonth() + 1,
-    ).padStart(2, '0')}-01`;
-
-    const { error } = await supabase
-      .from('execution_record')
-      .update({ status: '지연' })
-      .neq('status', '완료')
-      .lt('due_date', currentMonthStartText);
+    const { error } = await supabase.rpc('mark_delayed_execution_records');
 
     if (error) {
       console.error('execution_record delayed sync error:', error);
@@ -365,26 +355,95 @@ export function useSecurityActivityData() {
     const endYear = currentYear + 1;
 
     const scheduleDates = getScheduleDatesByFrequency(master.frequency, startYear, endYear);
+    const scheduleDateSet = new Set(scheduleDates);
 
-    const { error: deleteError } = await supabase
+    const { data: existingRows, error: existingLoadError } = await supabase
       .from('execution_record')
-      .delete()
+      .select('id, due_date, status, execution_note')
       .eq('activity_master_id', master.id);
 
-    if (deleteError) {
-      console.error('execution_record delete error:', deleteError);
-      throw new Error(deleteError.message);
+    if (existingLoadError) {
+      console.error('execution_record load error:', existingLoadError);
+      throw new Error(existingLoadError.message);
     }
 
-    if (scheduleDates.length === 0) {
-      return;
+    const existing = existingRows ?? [];
+    const existingIds = existing.map((row) => row.id);
+
+    let evidenceRecordIdSet = new Set<string>();
+
+    if (existingIds.length > 0) {
+      const { data: evidenceRows, error: evidenceLoadError } = await supabase
+        .from('evidence_file')
+        .select('execution_record_id')
+        .in('execution_record_id', existingIds);
+
+      if (evidenceLoadError) {
+        console.error('evidence_file load error:', evidenceLoadError);
+        throw new Error(evidenceLoadError.message);
+      }
+
+      evidenceRecordIdSet = new Set(
+        (evidenceRows ?? []).map((row) => row.execution_record_id as string),
+      );
     }
 
-    const payload = scheduleDates.map((dueDate) => ({
+    const updatableIds: string[] = [];
+    const removableIds: string[] = [];
+
+    existing.forEach((row) => {
+      const dueDate = String(row.due_date).slice(0, 10);
+
+      if (scheduleDateSet.has(dueDate)) {
+        updatableIds.push(row.id);
+        scheduleDateSet.delete(dueDate);
+        return;
+      }
+
+      const executionNote = String(row.execution_note ?? '').trim();
+      const hasEvidence = evidenceRecordIdSet.has(row.id);
+
+      if (row.status === '예약' && executionNote === '' && !hasEvidence) {
+        removableIds.push(row.id);
+      }
+    });
+
+    if (updatableIds.length > 0) {
+      const { error: updateError } = await supabase
+        .from('execution_record')
+        .update({
+          owner_department: master.ownerDepartment,
+          partner_department: master.partnerDepartment,
+          frequency_label: master.frequency,
+          title: master.name,
+          description: master.purpose,
+        })
+        .eq('activity_master_id', master.id)
+        .in('id', updatableIds);
+
+      if (updateError) {
+        console.error('execution_record update error:', updateError);
+        throw new Error(updateError.message);
+      }
+    }
+
+    if (removableIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('execution_record')
+        .delete()
+        .eq('activity_master_id', master.id)
+        .in('id', removableIds);
+
+      if (deleteError) {
+        console.error('execution_record cleanup delete error:', deleteError);
+        throw new Error(deleteError.message);
+      }
+    }
+
+    const payload = Array.from(scheduleDateSet).map((dueDate) => ({
       activity_master_id: master.id,
       owner_department: master.ownerDepartment,
       partner_department: master.partnerDepartment,
-      department: master.ownerDepartment,
       frequency_label: master.frequency,
       title: master.name,
       description: master.purpose,
@@ -414,7 +473,6 @@ export function useSecurityActivityData() {
       name: selectedMaster.name,
       owner_department: selectedMaster.ownerDepartment,
       partner_department: normalizedPartnerDepartment,
-      department: selectedMaster.ownerDepartment,
       frequency: selectedMaster.frequency,
       purpose: selectedMaster.purpose,
       guide: selectedMaster.guide,

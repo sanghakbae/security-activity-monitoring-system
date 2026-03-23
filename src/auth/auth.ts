@@ -1,8 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env';
 
-const APP_BASE_PATH = '/security-activity-monitoring-system';
-
 export type AuthState = {
   authenticated: boolean;
   email: string | null;
@@ -13,11 +11,10 @@ function getBaseUrl() {
     return '';
   }
 
-  if (import.meta.env.PROD) {
-    return `${window.location.origin}${APP_BASE_PATH}`;
-  }
-
-  return window.location.origin;
+  const base = import.meta.env.BASE_URL ?? '/';
+  const normalizedBase =
+    base === '/' || base === '' ? '' : base.endsWith('/') ? base.slice(0, -1) : base;
+  return `${window.location.origin}${normalizedBase}`;
 }
 
 export async function signInWithGoogle() {
@@ -29,7 +26,7 @@ export async function signInWithGoogle() {
     throw new Error('Supabase client is not initialized.');
   }
 
-  const redirectTo = `${getBaseUrl()}/`;
+  const redirectTo = `${getBaseUrl()}/auth/callback`;
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

@@ -1,0 +1,76 @@
+name: Send Delayed Alert
+
+on:
+  schedule:
+    # Weekdays 13:00 and 17:00 KST (04:00 and 08:00 UTC)
+    - cron: '0 4,8 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  send-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check KR public holiday (Asia/Seoul)
+        id: holiday_check
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          seoul_now = datetime.now(ZoneInfo("Asia/Seoul"))
+          today = seoul_now.strftime("%Y-%m-%d")
+          year = seoul_now.strftime("%Y")
+          url = f"https://date.nager.at/api/v3/PublicHolidays/{year}/KR"
+
+          is_holiday = False
+          try:
+            with urllib.request.urlopen(url, timeout=10) as response:
+              holidays = json.loads(response.read().decode("utf-8"))
+            is_holiday = any(item.get("date") == today for item in holidays)
+          except Exception as error:
+            print(f"Holiday API check failed: {error}")
+
+          github_output = os.environ.get("GITHUB_OUTPUT")
+          if github_output:
+            with open(github_output, "a", encoding="utf-8") as f:
+              f.write(f"is_holiday={'true' if is_holiday else 'false'}\n")
+              f.write(f"today={today}\n")
+
+          print(f"KST date: {today}, is_holiday={is_holiday}")
+          PY
+
+      - name: Invoke Supabase delayed alert function
+        if: steps.holiday_check.outputs.is_holiday != 'true'
+        env:
+          SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_FUNCTIONS_BASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "Required secrets are missing."
+            echo "- SUPABASE_FUNCTIONS_BASE_URL"
+            echo "- SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+
+          FUNCTION_URL="${SUPABASE_FUNCTIONS_BASE_URL%/}/send-delayed-alert"
+          echo "Calling: ${FUNCTION_URL}"
+
+          HTTP_CODE=$(curl -sS -o /tmp/function_response.txt -w "%{http_code}" \
+            -X POST "${FUNCTION_URL}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            --data '{}')
+
+          echo "Status: ${HTTP_CODE}"
+          cat /tmp/function_response.txt
+
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            echo "Function call failed"
+            exit 1
+          fi

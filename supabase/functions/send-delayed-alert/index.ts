@@ -52,6 +52,18 @@ Deno.serve(async () => {
     console.log('[send-delayed-alert] webhook configured');
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const { error: syncError } = await supabase.rpc('mark_delayed_execution_records');
+
+    if (syncError) {
+      console.error('[send-delayed-alert] delayed sync error:', syncError.message);
+      return new Response(
+        JSON.stringify({ error: syncError.message }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
 
     const { data, error } = await supabase
       .from('execution_record')
