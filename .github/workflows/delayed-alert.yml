@@ -2,8 +2,8 @@ name: Send Delayed Alert
 
 on:
   schedule:
-    # Weekdays 13:00 and 17:00 KST (04:00 and 08:00 UTC)
-    - cron: '0 4,8 * * 1-5'
+    # Weekdays 14:00 and 19:00 KST (05:00 and 10:00 UTC)
+    - cron: '0 5,10 * * 1-5'
   workflow_dispatch:
 
 jobs:
