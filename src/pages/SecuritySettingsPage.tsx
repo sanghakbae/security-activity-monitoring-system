@@ -14,6 +14,19 @@ export default function SecuritySettingsPage({
 }: SecuritySettingsPageProps) {
   const [saving, setSaving] = useState(false);
 
+  const normalizeAllowedEmailDomainsText = (value: string) => {
+    const unique = Array.from(
+      new Set(
+        value
+          .split(',')
+          .map((item) => item.trim().toLowerCase())
+          .filter((item) => item !== ''),
+      ),
+    );
+
+    return unique.join(', ');
+  };
+
   const alertTimesText = useMemo(
     () => settings.googleChatAlertTimes.join(', '),
     [settings.googleChatAlertTimes],
@@ -23,7 +36,7 @@ export default function SecuritySettingsPage({
     try {
       setSaving(true);
 
-      const normalizedDomain = settings.allowedEmailDomain.trim().toLowerCase();
+      const normalizedDomain = normalizeAllowedEmailDomainsText(settings.allowedEmailDomain);
       const timeout = Math.max(5, Math.min(10080, Math.floor(settings.sessionTimeoutMinutes)));
       const normalizedTimes = settings.googleChatAlertTimes
         .map((item) => item.trim())
@@ -83,8 +96,9 @@ export default function SecuritySettingsPage({
               })
             }
             className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-[14px] outline-none"
-            placeholder="예: muhayu.com"
+            placeholder="예: muhayu.com, gmail.com"
           />
+          <p className="mt-2 text-xs text-slate-400">여러 도메인은 쉼표(,)로 구분해 입력하세요.</p>
         </div>
 
         <div>

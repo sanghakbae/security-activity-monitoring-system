@@ -7,14 +7,31 @@ export type AuthState = {
 };
 
 type RuntimeSecuritySettings = {
-  allowedEmailDomain: string;
+  allowedEmailDomains: string[];
   sessionTimeoutMinutes: number;
 };
 
 const defaultRuntimeSecuritySettings: RuntimeSecuritySettings = {
-  allowedEmailDomain: ALLOWED_DOMAIN,
+  allowedEmailDomains: [ALLOWED_DOMAIN],
   sessionTimeoutMinutes: 60,
 };
+
+function parseAllowedEmailDomains(value: unknown): string[] {
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  const unique = Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item !== ''),
+    ),
+  );
+
+  return unique;
+}
 
 function getBaseUrl() {
   if (typeof window === 'undefined') {
@@ -67,10 +84,10 @@ async function loadRuntimeSecuritySettings(): Promise<RuntimeSecuritySettings> {
   }
 
   return {
-    allowedEmailDomain:
-      typeof row.allowed_email_domain === 'string' && row.allowed_email_domain.trim() !== ''
-        ? row.allowed_email_domain
-        : defaultRuntimeSecuritySettings.allowedEmailDomain,
+    allowedEmailDomains:
+      parseAllowedEmailDomains(row.allowed_email_domain).length > 0
+        ? parseAllowedEmailDomains(row.allowed_email_domain)
+        : defaultRuntimeSecuritySettings.allowedEmailDomains,
     sessionTimeoutMinutes:
       typeof row.session_timeout_minutes === 'number' && row.session_timeout_minutes > 0
         ? row.session_timeout_minutes
@@ -89,13 +106,14 @@ export async function signInWithGoogle() {
 
   const runtimeSettings = await loadRuntimeSecuritySettings();
   const redirectTo = `${getBaseUrl()}/auth/callback`;
+  const primaryDomain = runtimeSettings.allowedEmailDomains[0] ?? ALLOWED_DOMAIN;
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
       queryParams: {
-        hd: runtimeSettings.allowedEmailDomain,
+        hd: primaryDomain,
         prompt: 'select_account',
       },
     },
@@ -163,7 +181,7 @@ export async function validateCurrentUser(): Promise<AuthState> {
   const domain = email.split('@')[1]?.toLowerCase() ?? '';
   const runtimeSettings = await loadRuntimeSecuritySettings();
 
-  if (domain !== runtimeSettings.allowedEmailDomain.toLowerCase()) {
+  if (!runtimeSettings.allowedEmailDomains.includes(domain)) {
     await signOut();
 
     return {

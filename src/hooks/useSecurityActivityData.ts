@@ -119,12 +119,30 @@ const defaultSecuritySettings: SecuritySettings = {
   googleChatAlertTimes: ['14:00', '19:00'],
 };
 
+function normalizeAllowedEmailDomainsText(value: unknown): string {
+  if (typeof value !== 'string') {
+    return defaultSecuritySettings.allowedEmailDomain;
+  }
+
+  const unique = Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item !== ''),
+    ),
+  );
+
+  if (unique.length === 0) {
+    return defaultSecuritySettings.allowedEmailDomain;
+  }
+
+  return unique.join(', ');
+}
+
 function mapSecuritySettings(row: any): SecuritySettings {
   return {
-    allowedEmailDomain:
-      typeof row.allowed_email_domain === 'string' && row.allowed_email_domain.trim() !== ''
-        ? row.allowed_email_domain
-        : defaultSecuritySettings.allowedEmailDomain,
+    allowedEmailDomain: normalizeAllowedEmailDomainsText(row.allowed_email_domain),
     sessionTimeoutMinutes:
       typeof row.session_timeout_minutes === 'number' && row.session_timeout_minutes > 0
         ? row.session_timeout_minutes
@@ -760,7 +778,7 @@ export function useSecurityActivityData() {
     }
 
     const payload = {
-      allowed_email_domain: next.allowedEmailDomain.trim().toLowerCase(),
+      allowed_email_domain: normalizeAllowedEmailDomainsText(next.allowedEmailDomain),
       session_timeout_minutes: Math.max(5, Math.min(10080, Math.floor(next.sessionTimeoutMinutes))),
       google_chat_alert_times: next.googleChatAlertTimes,
     };
