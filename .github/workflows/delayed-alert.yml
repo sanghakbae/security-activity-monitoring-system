@@ -45,25 +45,25 @@ jobs:
       - name: Invoke Supabase delayed alert function
         if: steps.holiday_check.outputs.is_holiday != 'true'
         env:
-          SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
 
-          if [ -z "${SUPABASE_FUNCTIONS_BASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
             echo "Required secrets are missing."
-            echo "- SUPABASE_FUNCTIONS_BASE_URL"
-            echo "- SUPABASE_SERVICE_ROLE_KEY"
+            echo "- VITE_SUPABASE_URL"
+            echo "- VITE_SUPABASE_ANON_KEY"
             exit 1
           fi
 
-          FUNCTION_URL="${SUPABASE_FUNCTIONS_BASE_URL%/}/send-delayed-alert"
+          FUNCTION_URL="${SUPABASE_URL%/}/functions/v1/send-delayed-alert"
           echo "Calling: ${FUNCTION_URL}"
 
           HTTP_CODE=$(curl -sS -o /tmp/function_response.txt -w "%{http_code}" \
             -X POST "${FUNCTION_URL}" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Content-Type: application/json" \
             --data '{}')
 

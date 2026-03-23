@@ -200,10 +200,9 @@ GitHub Actions 스케줄러로 자동 호출합니다.
 
 저장소 `Settings > Secrets and variables > Actions`에서 아래 2개를 추가합니다.
 
-- `SUPABASE_FUNCTIONS_BASE_URL`  
-  예: `https://<project-ref>.supabase.co/functions/v1`
-- `SUPABASE_SERVICE_ROLE_KEY`  
-  Supabase 프로젝트의 Service Role Key
+- `VITE_SUPABASE_URL`  
+  예: `https://<project-ref>.supabase.co`
+- `VITE_SUPABASE_ANON_KEY`
 
 ## 2. 동작 시간
 
