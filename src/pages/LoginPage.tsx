@@ -20,24 +20,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#dde2ea] px-4 py-8 sm:px-6">
-      <div className="w-full max-w-4xl overflow-hidden rounded-[36px] border border-[#d9dde6] bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
-        <div className="bg-[#f3f5f9] px-6 pb-10 pt-8 sm:px-12 sm:pb-12 sm:pt-10">
-          <div className="inline-flex items-center rounded-full border border-[#d1d8e3] bg-[#f5f7fb] px-4 py-2 text-[15px] font-semibold tracking-[0.14em] text-[#728099] sm:px-5 sm:text-[18px]">
+    <div className="flex min-h-screen items-center justify-center bg-[#dfe4ec] px-4 py-7 sm:px-6 sm:py-10">
+      <div className="w-full max-w-[860px] overflow-hidden rounded-[42px] border border-[#d9dee7] bg-white shadow-[0_22px_55px_rgba(15,23,42,0.09)]">
+        <div className="bg-[#f3f5f9] px-6 pb-9 pt-8 sm:px-12 sm:pb-12 sm:pt-10">
+          <div className="inline-flex items-center rounded-full border border-[#d2d9e4] bg-[#f6f8fb] px-4 py-2 text-[14px] font-semibold tracking-[0.12em] text-[#6f7f98] sm:px-5 sm:text-[16px]">
             VULNERABILITY MANAGEMENT
           </div>
-          <h1 className="mt-7 text-[42px] font-semibold leading-[1.2] text-[#0f172a] sm:text-[54px]">
+          <h1 className="mt-7 text-[44px] font-semibold leading-[1.2] text-[#111827] sm:text-[54px]">
             취약점 관리 시스템
           </h1>
-          <p className="mt-5 text-[30px] text-[#6e7a90] sm:text-[38px]">
+          <p className="mt-5 text-[24px] text-[#6f7d93] sm:text-[40px]">
             허용된 Google 계정으로 로그인하세요.
           </p>
         </div>
 
-        <div className="px-6 pb-8 pt-6 sm:px-12 sm:pb-12 sm:pt-8">
-          <div className="rounded-[26px] border border-[#d5dbe5] bg-[#f7f9fc] px-6 py-5 sm:px-8 sm:py-6">
-            <p className="text-[26px] font-medium text-[#75839a] sm:text-[32px]">로그인 방식</p>
-            <p className="mt-2 text-[24px] text-[#5f6f88] sm:text-[34px]">
+        <div className="border-t border-[#eaedf2] px-6 pb-8 pt-6 sm:px-12 sm:pb-12 sm:pt-8">
+          <div className="rounded-[28px] border border-[#d5dce7] bg-[#f7f9fc] px-6 py-5 sm:px-8 sm:py-6">
+            <p className="text-[22px] font-medium text-[#75839a] sm:text-[34px]">로그인 방식</p>
+            <p className="mt-2 text-[20px] text-[#5f6f88] sm:text-[36px]">
               Google OAuth<span className="mx-2">·</span>허용 도메인
               <span className="mx-2 text-[#7b899f]">`muhayu.com`, `gmail.com`</span>
             </p>
@@ -46,15 +46,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <button
             type="button"
             onClick={handleLogin}
-            className="mt-7 flex w-full items-center justify-center gap-4 rounded-[30px] bg-[#000a28] px-5 py-4 text-[28px] font-semibold text-white transition hover:bg-[#071338] sm:mt-8 sm:py-5 sm:text-[38px]"
+            className="mt-7 flex w-full items-center justify-center gap-3 rounded-[30px] bg-[#000927] px-5 py-4 text-[22px] font-semibold text-white transition hover:bg-[#081437] sm:mt-8 sm:py-5 sm:text-[42px]"
           >
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-[24px] font-semibold leading-none text-[#1a2337] sm:h-14 sm:w-14 sm:text-[30px]">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-[22px] font-semibold leading-none text-[#1a2337] sm:h-14 sm:w-14 sm:text-[32px]">
               G
             </span>
             <span>Google 계정으로 로그인</span>
           </button>
 
-          <p className="mt-7 text-center text-[20px] text-[#a0abbd] sm:mt-8 sm:text-[30px]">
+          <p className="mt-7 text-center text-[17px] text-[#a4aec0] sm:mt-8 sm:text-[30px]">
             로그인되지 않으면 관리자에게 계정 허용 여부를 확인하세요.
           </p>
         </div>
