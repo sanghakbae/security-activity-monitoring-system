@@ -2,8 +2,8 @@ name: Send Delayed Alert
 
 on:
   schedule:
-    # Evaluate every minute on weekdays; actual send times follow DB security_setting.google_chat_alert_times (KST).
-    - cron: '* * * * 1-5'
+    # Evaluate every 5 minutes on weekdays; actual send times follow DB security_setting.google_chat_alert_times (KST).
+    - cron: '*/5 * * * 1-5'
   workflow_dispatch:
     inputs:
       force_send:
