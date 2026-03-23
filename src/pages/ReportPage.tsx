@@ -170,7 +170,7 @@ export default function ReportPage({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="rounded-md border border-slate-200 bg-white p-2.5 shadow-sm">
         <div className="mb-3 border-b border-slate-100 pb-2">
           <div className="text-[16px] font-semibold">리포트 생성</div>
           <div className="mt-0.5 text-xs text-slate-500">
@@ -192,7 +192,7 @@ export default function ReportPage({
             <select
               value={reportType}
               onChange={(e) => setReportType(e.target.value as ReportType)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
+              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
             >
               <option value="adHoc">수시</option>
               <option value="quarter">분기</option>
@@ -209,7 +209,7 @@ export default function ReportPage({
               <select
                 value={quarter}
                 onChange={(e) => setQuarter(Number(e.target.value))}
-                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
               >
                 <option value={1}>1분기</option>
                 <option value={2}>2분기</option>
@@ -227,7 +227,7 @@ export default function ReportPage({
               <select
                 value={half}
                 onChange={(e) => setHalf(Number(e.target.value))}
-                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
               >
                 <option value={1}>상반기</option>
                 <option value={2}>하반기</option>
@@ -242,7 +242,7 @@ export default function ReportPage({
             <select
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
+              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium outline-none focus:border-slate-400"
             >
               {yearOptions.map((optionYear) => (
                 <option key={optionYear} value={optionYear}>
@@ -259,7 +259,7 @@ export default function ReportPage({
             <button
               type="button"
               onClick={() => setPreviewOpen(true)}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               미리보기 열기
             </button>
@@ -273,7 +273,7 @@ export default function ReportPage({
               type="button"
               onClick={handleGeneratePdf}
               disabled={filteredRecords.length === 0 || isGenerating}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-2 py-1.5 text-[13px] font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 px-2 py-1.5 text-[13px] font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <FileText className="h-4 w-4" />
               {isGenerating ? '생성 중...' : 'PDF 생성'}
@@ -282,10 +282,10 @@ export default function ReportPage({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="rounded-md border border-slate-200 bg-white p-2.5 shadow-sm">
         <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
           <div className="text-[16px] font-semibold">리포트 대상 미리보기</div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-semibold text-slate-700">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-semibold text-slate-700">
             대상 활동 수: <span className="text-slate-900">{filteredRecords.length}건</span>
           </div>
         </div>
@@ -316,11 +316,11 @@ export default function ReportPage({
 
         <div className="mb-1.5 text-[14px] font-semibold text-slate-900">보안 활동 상세 내역</div>
         {filteredRecords.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-7 text-center text-[13px] text-slate-400">
+          <div className="rounded-md border border-dashed border-slate-200 px-2.5 py-6 text-center text-[13px] text-slate-400">
             선택한 조건에 해당하는 활동이 없습니다.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200">
+          <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full table-fixed border-collapse text-[13px]">
               <colgroup>
                 <col className="w-[13%]" />
@@ -384,13 +384,13 @@ export default function ReportPage({
 
       {previewOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-5xl rounded-lg border border-slate-200 bg-white shadow-xl">
+          <div className="w-full max-w-[95vw] rounded-md border border-slate-200 bg-white shadow-xl lg:max-w-5xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <div className="text-[15px] font-semibold">리포트 미리보기</div>
               <button
                 type="button"
                 onClick={() => setPreviewOpen(false)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
               >
                 닫기
               </button>
@@ -429,11 +429,11 @@ export default function ReportPage({
                 보안 활동 상세 내역
               </div>
               {filteredRecords.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-200 px-3 py-7 text-center text-[13px] text-slate-400">
+                <div className="rounded-md border border-dashed border-slate-200 px-2.5 py-6 text-center text-[13px] text-slate-400">
                   선택한 조건에 해당하는 활동이 없습니다.
                 </div>
               ) : (
-                <div className="max-h-[65vh] overflow-auto rounded-lg border border-slate-200">
+                <div className="max-h-[65vh] overflow-auto rounded-md border border-slate-200">
                   <table className="w-full table-fixed border-collapse text-[13px]">
                     <colgroup>
                       <col className="w-[13%]" />

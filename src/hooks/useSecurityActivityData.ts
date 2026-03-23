@@ -411,7 +411,7 @@ export function useSecurityActivityData() {
     return filteredRecords.slice(startIndex, startIndex + executionPageSize);
   }, [executionPage, executionTotalPages, filteredRecords]);
 
-  const catalogPageSize = 10;
+  const catalogPageSize = 20;
   const catalogTotalPages = Math.max(1, Math.ceil(masters.length / catalogPageSize));
 
   const paginatedMasters = useMemo(() => {

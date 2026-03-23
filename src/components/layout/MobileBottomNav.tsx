@@ -28,8 +28,8 @@ const items: Array<{
 
 export default function MobileBottomNav({ activeMenu, setActiveMenu }: MobileBottomNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
-      <div className="grid grid-cols-6 gap-1">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-1.5 py-1.5 backdrop-blur-sm lg:hidden">
+      <div className="grid grid-cols-6 gap-0.5">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = activeMenu === item.key;
@@ -39,16 +39,18 @@ export default function MobileBottomNav({ activeMenu, setActiveMenu }: MobileBot
               key={item.key}
               type="button"
               onClick={() => setActiveMenu(item.key)}
-              className="flex flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2"
+              className="flex flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5"
             >
               <div
-                className={`flex h-11 w-11 items-center justify-center rounded-full ${
+                className={`flex h-9 w-9 items-center justify-center rounded-md ${
                   isActive ? 'bg-blue-50 text-blue-600' : 'text-slate-400'
                 }`}
               >
-                <Icon className="h-6 w-6" />
+                <Icon className="h-5 w-5" />
               </div>
-              <span className={`text-[11px] font-medium ${isActive ? 'text-blue-600' : 'text-slate-400'}`}>
+              <span
+                className={`text-[10px] font-medium ${isActive ? 'text-blue-600' : 'text-slate-400'}`}
+              >
                 {item.label}
               </span>
             </button>

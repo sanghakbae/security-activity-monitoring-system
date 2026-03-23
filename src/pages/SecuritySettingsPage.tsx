@@ -74,7 +74,7 @@ export default function SecuritySettingsPage({
   };
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <section className="rounded-md border border-slate-200 bg-white p-2.5 shadow-sm">
       <div className="mb-3 border-b border-slate-100 pb-2">
         <div className="text-[16px] font-semibold">보안 설정</div>
         <div className="mt-1 text-sm text-slate-500">
@@ -95,7 +95,7 @@ export default function SecuritySettingsPage({
                 allowedEmailDomain: e.target.value,
               })
             }
-            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[14px] outline-none"
+            className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[13px] outline-none"
             placeholder="예: muhayu.com, gmail.com"
           />
           <p className="mt-2 text-xs text-slate-400">여러 도메인은 쉼표(,)로 구분해 입력하세요.</p>
@@ -116,7 +116,7 @@ export default function SecuritySettingsPage({
                 sessionTimeoutMinutes: Number(e.target.value || 60),
               })
             }
-            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[14px] outline-none"
+            className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[13px] outline-none"
           />
         </div>
 
@@ -135,7 +135,7 @@ export default function SecuritySettingsPage({
                   .filter((item) => item !== ''),
               })
             }
-            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[14px] outline-none"
+            className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[13px] outline-none"
             placeholder="예: 14:00, 19:00"
           />
           <p className="mt-2 text-xs text-slate-400">
@@ -148,7 +148,7 @@ export default function SecuritySettingsPage({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-lg bg-slate-900 px-2.5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {saving ? '저장 중...' : '저장'}
           </button>

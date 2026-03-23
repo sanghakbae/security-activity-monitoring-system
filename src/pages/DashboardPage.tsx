@@ -502,9 +502,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
             onLogout={onLogout}
           />
 
-          <div className="p-4 lg:p-6">
-            <div className="mb-4 px-1 pb-4 pt-1 lg:hidden">
-              <h1 className="text-[20px] font-semibold">{activeMenuLabel}</h1>
+          <div className="p-3 lg:p-6">
+            <div className="mb-2 px-0.5 pb-2 pt-0.5 lg:hidden">
+              <h1 className="text-[17px] font-semibold">{activeMenuLabel}</h1>
             </div>
 
             {activeMenu === 'dashboard' && (

@@ -83,11 +83,11 @@ export default function CatalogPage({
               }`}
             >
               <div className="flex items-center gap-2">
-                <div className="min-w-0 truncate text-[13px] font-semibold">
+                <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">
                   {master.name || '이름 없음'}
                 </div>
                 <span
-                  className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                  className={`ml-auto inline-flex w-[58px] shrink-0 justify-center whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
                     selectedMasterId === master.id
                       ? 'border-white/30 bg-white/15 text-white'
                       : getFrequencyTagStyle(master.frequency)

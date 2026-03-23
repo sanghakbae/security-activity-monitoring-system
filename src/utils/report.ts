@@ -276,7 +276,7 @@ function drawSummaryCard(
 
   const centerY = yTop - height / 2;
   drawCenteredText(page, label, x, centerY + 8, width, boldFont, 10, COLORS.subText);
-  drawCenteredText(page, value, x, centerY - 12, width, boldFont, 18, valueColor);
+  drawCenteredText(page, value, x, centerY - 10, width, boldFont, 16, valueColor);
 }
 
 function drawTableHeader(
