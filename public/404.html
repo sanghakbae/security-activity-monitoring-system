@@ -8,18 +8,41 @@
 
     <script>
       (function () {
-        var params = new URLSearchParams(window.location.search);
-        var p = params.get('p');
+        var pathSegmentsToKeep = 1;
+        var l = window.location;
+        var path = l.pathname
+          .split('/')
+          .slice(1)
+          .map(function (segment) {
+            return encodeURIComponent(segment);
+          })
+          .join('/');
+        var search = l.search
+          ? '&q=' +
+            l.search
+              .slice(1)
+              .split('&')
+              .map(function (param) {
+                return encodeURIComponent(param);
+              })
+              .join('&')
+          : '';
+        var target =
+          l.protocol +
+          '//' +
+          l.hostname +
+          (l.port ? ':' + l.port : '') +
+          l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') +
+          '/?p=' +
+          path +
+          search +
+          l.hash;
 
-        if (p) {
-          var newUrl = window.location.origin + '/' + p + window.location.hash;
-          window.history.replaceState(null, '', newUrl);
-        }
+        l.replace(target);
       })();
     </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/security-activity-monitoring-system/src/main.tsx"></script>
+    <div></div>
   </body>
 </html>
