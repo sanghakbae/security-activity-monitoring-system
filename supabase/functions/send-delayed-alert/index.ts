@@ -8,8 +8,6 @@ type DelayedRecord = {
   status: string;
 };
 
-const TARGET_ALERT_YEAR = 2026;
-
 function formatDepartmentLabel(
   ownerDepartment: string,
   partnerDepartment: string | null,
@@ -67,8 +65,10 @@ Deno.serve(async () => {
       );
     }
 
-    const targetYearStart = `${TARGET_ALERT_YEAR}-01-01`;
-    const targetYearEnd = `${TARGET_ALERT_YEAR}-12-31`;
+    const now = new Date();
+    const targetYear = now.getFullYear();
+    const targetYearStart = `${targetYear}-01-01`;
+    const targetYearEnd = `${targetYear}-12-31`;
 
     const { data, error } = await supabase
       .from('execution_record')
@@ -114,7 +114,7 @@ Deno.serve(async () => {
     });
 
     const messageText = [
-      `보안 활동 지연 알림 (${TARGET_ALERT_YEAR}년 대상)`,
+      `보안 활동 지연 알림 (${targetYear}년 대상)`,
       '',
       `총 ${delayedRecords.length}건의 지연 활동이 있습니다.`,
       '',
