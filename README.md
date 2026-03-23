@@ -202,7 +202,8 @@ GitHub Actions 스케줄러로 자동 호출합니다.
 
 - `VITE_SUPABASE_URL`  
   예: `https://<project-ref>.supabase.co`
-- `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_SECRET_API_KEY`  
+  Supabase `Secret API key` (Edge Function 인증용)
 
 ## 2. 동작 시간
 
