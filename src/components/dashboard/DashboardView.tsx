@@ -104,7 +104,7 @@ function StatCard({
   onClick,
 }: StatCardProps) {
   const baseClassName =
-    'rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm';
+    'rounded-md border border-slate-200 bg-white px-2 py-2 shadow-[0_4px_10px_rgba(15,23,42,0.10)]';
   const interactiveClassName = clickable
     ? 'cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md'
     : '';
@@ -116,8 +116,8 @@ function StatCard({
         onClick={onClick}
         className={`${baseClassName} ${interactiveClassName} w-full text-center`}
       >
-        <div className="text-sm font-medium text-slate-500">{label}</div>
-        <div className={`mt-2 text-[34px] font-bold leading-none ${accentClassName}`}>
+        <div className="text-xs font-medium text-slate-500">{label}</div>
+        <div className={`mt-1 text-[28px] font-bold leading-none ${accentClassName}`}>
           {value}
         </div>
       </button>
@@ -126,8 +126,8 @@ function StatCard({
 
   return (
     <div className={`${baseClassName} text-center`}>
-      <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className={`mt-2 text-[34px] font-bold leading-none ${accentClassName}`}>
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className={`mt-1 text-[28px] font-bold leading-none ${accentClassName}`}>
         {value}
       </div>
     </div>
@@ -181,8 +181,8 @@ export default function DashboardView({
   }, [dashboardTasks, currentYear]);
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
         <StatCard label="전체 수행률" value={`${dashboardStats.rate}%`} />
         <StatCard
           label="이번 달 대상"
@@ -206,14 +206,14 @@ export default function DashboardView({
         />
       </div>
 
-      <div className="flex flex-col items-end gap-2">
-        <div className="text-sm text-slate-500">
+      <div className="flex flex-col items-end gap-1">
+        <div className="text-xs text-slate-500">
           설정 기간: {formatPeriodLabel(dashboardPeriodStart, dashboardPeriodEnd)}
         </div>
         <button
           type="button"
           onClick={onOpenDashboardSettings}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm"
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.10)]"
         >
           <Settings2 className="h-4 w-4" />
           대시보드 기간 설정
@@ -221,45 +221,45 @@ export default function DashboardView({
       </div>
 
       {dashboardSettingsOpen && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 text-[16px] font-semibold">대시보드 설정</div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="rounded-md border border-slate-200 bg-white p-2.5 shadow-[0_6px_14px_rgba(15,23,42,0.12)]">
+          <div className="mb-2.5 text-[14px] font-semibold">대시보드 설정</div>
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-600">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
                 시작 월
               </label>
               <input
                 type="month"
                 value={draftDashboardPeriodStart}
                 onChange={(e) => setDraftDashboardPeriodStart(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none"
+                className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-xs outline-none"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-600">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
                 종료 월
               </label>
               <input
                 type="month"
                 value={draftDashboardPeriodEnd}
                 onChange={(e) => setDraftDashboardPeriodEnd(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none"
+                className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-xs outline-none"
               />
             </div>
           </div>
 
-          <div className="mt-5 flex justify-end gap-3">
+          <div className="mt-3 flex justify-end gap-1.5">
             <button
               type="button"
               onClick={onCloseDashboardSettings}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
             >
               취소
             </button>
             <button
               type="button"
               onClick={onApplyDashboardSettings}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white"
             >
               적용
             </button>
@@ -267,25 +267,25 @@ export default function DashboardView({
         </section>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
+      <section className="rounded-md border border-slate-200 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.12)]">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-2 py-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5 text-slate-900" />
-              <h2 className="text-[18px] font-semibold">보안 활동 캘린더</h2>
+              <h2 className="text-[16px] font-semibold">보안 활동 캘린더</h2>
             </div>
 
-            <div className="text-sm font-medium text-slate-500">
+            <div className="text-xs font-medium text-slate-500">
               {currentDateTime}
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setCalendarMode('year')}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
                   calendarMode === 'year'
                     ? 'bg-slate-900 text-white'
                     : 'border border-slate-200 bg-white text-slate-700'
@@ -297,7 +297,7 @@ export default function DashboardView({
               <button
                 type="button"
                 onClick={() => setCalendarMode('range')}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
                   calendarMode === 'range'
                     ? 'bg-slate-900 text-white'
                     : 'border border-slate-200 bg-white text-slate-700'
@@ -308,12 +308,12 @@ export default function DashboardView({
             </div>
 
             {calendarMode === 'range' && (
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                <div className="flex items-center gap-1.5">
                   <select
                     value={rangeStartYear}
                     onChange={(e) => setRangeStartYear(Number(e.target.value))}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
                   >
                     {yearOptions.map((year) => (
                       <option key={`start-year-${year}`} value={year}>
@@ -325,7 +325,7 @@ export default function DashboardView({
                   <select
                     value={rangeStartQuarter}
                     onChange={(e) => setRangeStartQuarter(Number(e.target.value))}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
                   >
                     <option value={1}>1분기</option>
                     <option value={2}>2분기</option>
@@ -334,13 +334,13 @@ export default function DashboardView({
                   </select>
                 </div>
 
-                <div className="text-sm text-slate-400">~</div>
+                <div className="text-xs text-slate-400">~</div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <select
                     value={rangeEndYear}
                     onChange={(e) => setRangeEndYear(Number(e.target.value))}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
                   >
                     {yearOptions.map((year) => (
                       <option key={`end-year-${year}`} value={year}>
@@ -352,7 +352,7 @@ export default function DashboardView({
                   <select
                     value={rangeEndQuarter}
                     onChange={(e) => setRangeEndQuarter(Number(e.target.value))}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
                   >
                     <option value={1}>1분기</option>
                     <option value={2}>2분기</option>
@@ -366,7 +366,7 @@ export default function DashboardView({
         </div>
 
         {calendarMode === 'year' && (
-          <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <div className="grid grid-cols-3 gap-1.5 p-1.5 xl:grid-cols-6">
             {months.map((label, monthIndex) => {
               const monthTasks = annualTasks.filter(
                 (task) => getTaskMonth(task) === monthIndex + 1,
@@ -375,26 +375,29 @@ export default function DashboardView({
               return (
                 <div
                   key={`${currentYear}-${label}`}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70"
+                  className={`self-start overflow-hidden rounded-md border bg-slate-50/70 ${
+                    currentMonth === monthIndex + 1
+                      ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(103,232,249,0.75),0_0_20px_rgba(34,211,238,0.45)]'
+                      : 'border-slate-200'
+                  }`}
                 >
                   <div
-                    className={`border-b border-slate-200 px-4 py-3 text-center font-semibold ${
+                    className={`border-b border-slate-200 px-2 py-1.5 text-center text-lg font-semibold ${
                       currentMonth === monthIndex + 1
                         ? 'bg-slate-900 text-white'
                         : 'bg-slate-100 text-slate-900'
                     }`}
                   >
                     {label}
-                    {currentMonth === monthIndex + 1 ? ' (현재월)' : ''}
                   </div>
 
-                  <div className="min-h-[120px] p-2">
+                  <div className="flex min-h-[100px] flex-col justify-start p-0.5">
                     {monthTasks.length === 0 ? (
-                      <div className="flex h-[100px] items-center justify-center text-sm text-slate-400">
+                      <div className="flex h-[88px] items-start justify-center pt-2 text-xs text-slate-400">
                         일정 없음
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-1 min-[1800px]:grid-cols-2">
+                      <div className="grid grid-cols-2 gap-0.5">
                         {monthTasks.map((task) => (
                           <ActivityCard
                             key={task.id}
@@ -412,26 +415,26 @@ export default function DashboardView({
         )}
 
         {calendarMode === 'range' && (
-          <div className="p-4 lg:p-5">
+          <div className="p-2 lg:p-2.5">
             {quarterBlocks.length === 0 ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-600">
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-600">
                 시작 분기가 종료 분기보다 늦습니다. 기간을 다시 선택해 주세요.
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2.5">
                 {quarterBlocks.map((block) => {
                   const quarterMonths = getMonthsInQuarter(block.quarter);
 
                   return (
                     <div
                       key={`${block.year}-Q${block.quarter}`}
-                      className="rounded-2xl border border-slate-200 bg-slate-50/70"
+                      className="rounded-md border border-slate-200 bg-slate-50/70 shadow-[0_5px_12px_rgba(15,23,42,0.10)]"
                     >
-                      <div className="border-b border-slate-200 bg-slate-100 px-4 py-3 text-center font-semibold text-slate-900">
+                      <div className="border-b border-slate-200 bg-slate-100 px-2 py-1.5 text-center text-xs font-semibold text-slate-900">
                         {block.year}년 {block.quarter}분기
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 p-3 xl:grid-cols-3">
+                      <div className="grid grid-cols-3 gap-1.5 p-1.5">
                         {quarterMonths.map((month) => {
                           const monthTasks = dashboardTasks.filter(
                             (task) =>
@@ -442,19 +445,19 @@ export default function DashboardView({
                           return (
                             <div
                               key={`${block.year}-${month}`}
-                              className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                              className="self-start overflow-hidden rounded-md border border-slate-200 bg-white"
                             >
-                              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-center text-sm font-semibold text-slate-800">
+                              <div className="border-b border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm font-semibold text-slate-800">
                                 {month}월
                               </div>
 
-                              <div className="min-h-[120px] p-2">
+                              <div className="flex min-h-[100px] flex-col justify-start p-0.5">
                                 {monthTasks.length === 0 ? (
-                                  <div className="flex h-[100px] items-center justify-center text-sm text-slate-400">
+                                  <div className="flex h-[88px] items-start justify-center pt-2 text-xs text-slate-400">
                                     일정 없음
                                   </div>
                                 ) : (
-                                  <div className="grid grid-cols-1 gap-1 min-[1800px]:grid-cols-2">
+                                  <div className="grid grid-cols-2 gap-0.5">
                                     {monthTasks.map((task) => (
                                       <ActivityCard
                                         key={task.id}

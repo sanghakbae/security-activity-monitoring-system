@@ -191,36 +191,43 @@ Deployment
 
 ------------------------------------------------------------------------
 
-# 지연 알림 자동 실행 설정
+# 지연 알림 자동 실행 설정 (Supabase cron)
 
 Google Chat 지연 알림은 `send-delayed-alert` Edge Function을
-GitHub Actions 스케줄러로 자동 호출합니다.
+Supabase DB cron(`pg_cron`)으로 자동 호출합니다.
 
-## 1. GitHub Secrets 추가
+## 1. 마이그레이션 적용
 
-저장소 `Settings > Secrets and variables > Actions`에서 아래 2개를 추가합니다.
+아래 파일을 Supabase에 반영합니다.
 
-- `VITE_SUPABASE_URL`  
-  예: `https://<project-ref>.supabase.co`
-- `SUPABASE_SECRET_API_KEY`  
-  Supabase `Secret API key` (Edge Function 인증용)
+- `supabase/migrations/005_supabase_cron_delayed_alert.sql`
 
-함수가 JWT 검증 모드(`verify_jwt=true`)이면 `Secret API key`로는 401이 발생할 수 있습니다.
-이 경우 아래 키를 추가로 등록하면 워크플로가 자동으로 재시도합니다.
+이 마이그레이션은 5분 주기의 DB cron 작업(`send-delayed-alert-every-5m`)을 생성합니다.
 
-- `SUPABASE_SERVICE_ROLE_KEY` (fallback)
+## 2. Edge Function 배포
 
-## 2. 동작 시간
+함수 설정 파일:
 
-워크플로 파일: `.github/workflows/delayed-alert.yml`  
-기본 스케줄: **평일 매분 실행** 후, DB `security_setting.google_chat_alert_times`(KST)와 일치할 때만 발송합니다.
+- `supabase/config.toml` (`verify_jwt=false`)
+
+함수 배포:
+
+    supabase functions deploy send-delayed-alert
+
+## 3. 실제 발송 조건
+
+cron은 5분마다 함수를 호출하지만, 함수 내부에서 아래를 모두 만족할 때만 발송합니다.
+
+- Asia/Seoul 기준 평일
+- 대한민국 공휴일 제외
+- `security_setting.google_chat_alert_times`와 현재 시각(HH:MM) 일치
 
 즉, 앱의 `보안 설정 > 구글챗 알람 시간`을 바꾸면 자동 발송 시간도 같이 바뀝니다.
 
-## 3. 수동 테스트
+## 4. 수동 테스트
 
-GitHub Actions 탭에서 `Send Delayed Alert` 워크플로를 `Run workflow`로
-수동 실행해 동작을 검증할 수 있습니다.
+수동 테스트는 GitHub Actions `Send Delayed Alert`의 `Run workflow`를 사용하거나,
+함수 URL에 `?force_send=true`를 붙여 호출해 검증할 수 있습니다.
 
 ------------------------------------------------------------------------
 

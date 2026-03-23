@@ -24,7 +24,7 @@ export default function Header({
           <button
             type="button"
             onClick={onOpenDelayed}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600"
+            className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600"
           >
             <Bell className="h-5 w-5" />
             {delayedCount > 0 && (
@@ -35,7 +35,7 @@ export default function Header({
           <button
             type="button"
             onClick={onLogout}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             title={userEmail ? `${userEmail} 계정 로그아웃` : '로그아웃'}
           >
             로그아웃

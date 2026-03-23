@@ -75,6 +75,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     setSelectedExecutionNote,
     updateExecutionNote,
     uploadEvidenceFile,
+    deleteEvidenceFile,
     markExecutionRecordComplete,
     loading,
     securitySettings,
@@ -389,10 +390,20 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
       window.alert('증적 파일이 업로드되었습니다.');
     } catch (error) {
       console.error('uploadEvidenceFile error:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : '증적 파일 업로드 중 오류가 발생했습니다.';
+
+      if (
+        errorMessage.includes('로그인 세션이 만료') ||
+        errorMessage.includes('권한이 없습니다')
+      ) {
+        window.alert('세션이 만료되어 자동 로그아웃됩니다. 다시 로그인해 주세요.');
+        await onLogout();
+        return;
+      }
+
       window.alert(
-        error instanceof Error
-          ? `증적 파일 업로드 오류: ${error.message}`
-          : '증적 파일 업로드 중 오류가 발생했습니다.',
+        `증적 파일 업로드 오류: ${errorMessage}`,
       );
     } finally {
       event.target.value = '';
@@ -431,6 +442,23 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
       console.error('markExecutionRecordComplete error:', error);
       window.alert(
         error instanceof Error ? `완료 처리 오류: ${error.message}` : '완료 처리 중 오류가 발생했습니다.',
+      );
+    }
+  };
+
+  const handleDeleteEvidenceFile = async (evidenceFileId: string) => {
+    const confirmed = window.confirm('선택한 증적 파일을 삭제하시겠습니까?');
+    if (!confirmed) return;
+
+    try {
+      await deleteEvidenceFile(evidenceFileId);
+      window.alert('증적 파일이 삭제되었습니다.');
+    } catch (error) {
+      console.error('deleteEvidenceFile error:', error);
+      window.alert(
+        error instanceof Error
+          ? `증적 파일 삭제 오류: ${error.message}`
+          : '증적 파일 삭제 중 오류가 발생했습니다.',
       );
     }
   };
@@ -551,6 +579,7 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
                 onChangeExecutionNote={setSelectedExecutionNote}
                 onSaveExecutionNote={handleSaveExecutionNote}
                 onOpenFileDialog={() => fileInputRef.current?.click()}
+                onDeleteEvidenceFile={handleDeleteEvidenceFile}
                 onComplete={handleComplete}
               />
             )}

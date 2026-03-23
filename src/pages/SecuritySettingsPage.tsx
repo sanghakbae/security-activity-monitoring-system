@@ -74,15 +74,15 @@ export default function SecuritySettingsPage({
   };
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-5 border-b border-slate-100 pb-4">
-        <div className="text-[18px] font-semibold">보안 설정</div>
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-3 border-b border-slate-100 pb-2">
+        <div className="text-[16px] font-semibold">보안 설정</div>
         <div className="mt-1 text-sm text-slate-500">
           로그인 허용 도메인, 세션 만료 시간, 구글챗 알람 시간을 설정합니다.
         </div>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         <div>
           <label className="mb-2 block text-[13px] font-semibold text-slate-800">
             허용 이메일 도메인
@@ -95,7 +95,7 @@ export default function SecuritySettingsPage({
                 allowedEmailDomain: e.target.value,
               })
             }
-            className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-[14px] outline-none"
+            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[14px] outline-none"
             placeholder="예: muhayu.com, gmail.com"
           />
           <p className="mt-2 text-xs text-slate-400">여러 도메인은 쉼표(,)로 구분해 입력하세요.</p>
@@ -116,7 +116,7 @@ export default function SecuritySettingsPage({
                 sessionTimeoutMinutes: Number(e.target.value || 60),
               })
             }
-            className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-[14px] outline-none"
+            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[14px] outline-none"
           />
         </div>
 
@@ -135,7 +135,7 @@ export default function SecuritySettingsPage({
                   .filter((item) => item !== ''),
               })
             }
-            className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-[14px] outline-none"
+            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[14px] outline-none"
             placeholder="예: 14:00, 19:00"
           />
           <p className="mt-2 text-xs text-slate-400">
@@ -148,7 +148,7 @@ export default function SecuritySettingsPage({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="rounded-lg bg-slate-900 px-2.5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {saving ? '저장 중...' : '저장'}
           </button>

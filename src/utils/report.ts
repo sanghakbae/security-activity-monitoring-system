@@ -99,8 +99,60 @@ async function loadFontBytes(url: string) {
   return await response.arrayBuffer();
 }
 
-function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number) {
-  const source = text && text.trim() !== '' ? text : '-';
+function normalizePdfText(value: string) {
+  return value.replace(/\r\n/g, '\n').normalize('NFC');
+}
+
+function fitTextToWidth(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number,
+) {
+  const source = normalizePdfText(text && text.trim() !== '' ? text : '-');
+
+  if (font.widthOfTextAtSize(source, fontSize) <= maxWidth) {
+    return source;
+  }
+
+  const ellipsis = '...';
+  let clipped = source;
+
+  while (clipped.length > 0) {
+    const candidate = `${clipped}${ellipsis}`;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      return candidate;
+    }
+    clipped = clipped.slice(0, -1);
+  }
+
+  return ellipsis;
+}
+
+function fitSingleLineFontSize(
+  text: string,
+  font: PDFFont,
+  preferredSize: number,
+  minSize: number,
+  maxWidth: number,
+) {
+  const source = normalizePdfText(text && text.trim() !== '' ? text : '-');
+  let size = preferredSize;
+
+  while (size > minSize && font.widthOfTextAtSize(source, size) > maxWidth) {
+    size -= 0.5;
+  }
+
+  return size;
+}
+
+function wrapTextLines(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number,
+) {
+  const source = normalizePdfText(text && text.trim() !== '' ? text : '-');
   const paragraphs = source.split('\n');
   const lines: string[] = [];
 
@@ -114,9 +166,7 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
 
     for (const char of paragraph) {
       const candidate = current + char;
-      const width = font.widthOfTextAtSize(candidate, fontSize);
-
-      if (width > maxWidth && current !== '') {
+      if (font.widthOfTextAtSize(candidate, fontSize) > maxWidth && current !== '') {
         lines.push(current);
         current = char;
       } else {
@@ -132,12 +182,20 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
   return lines.length > 0 ? lines : ['-'];
 }
 
-function getEvidenceText(files: ExecutionEvidenceFile[]) {
-  if (files.length === 0) {
-    return '증적 없음';
-  }
+function isEmbeddableImageFile(fileName: string) {
+  return /\.(png|jpe?g)$/i.test(fileName);
+}
 
-  return files.map((file) => file.fileName).join(', ');
+function getDocumentEvidenceLines(files: ExecutionEvidenceFile[]) {
+  const docs = Array.from(
+    new Set(
+      files
+        .filter((file) => !isEmbeddableImageFile(file.fileName))
+        .map((file) => normalizePdfText(file.fileName)),
+    ),
+  );
+
+  return docs.length > 0 ? docs : ['증적 없음'];
 }
 
 function drawText(
@@ -216,8 +274,9 @@ function drawSummaryCard(
     borderWidth: 0.8,
   });
 
-  drawCenteredText(page, label, x, yTop - 18, width, boldFont, 10, COLORS.subText);
-  drawCenteredText(page, value, x, yTop - 40, width, boldFont, 18, valueColor);
+  const centerY = yTop - height / 2;
+  drawCenteredText(page, label, x, centerY + 8, width, boldFont, 10, COLORS.subText);
+  drawCenteredText(page, value, x, centerY - 12, width, boldFont, 18, valueColor);
 }
 
 function drawTableHeader(
@@ -227,9 +286,10 @@ function drawTableHeader(
   colWidths: number[],
   headers: string[],
   boldFont: PDFFont,
+  headerHeight: number,
+  fontSize: number,
 ) {
   const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
-  const headerHeight = 24;
 
   page.drawRectangle({
     x: startX,
@@ -248,10 +308,10 @@ function drawTableHeader(
       page,
       header,
       currentX,
-      yTop - 18,
+      yTop - headerHeight / 2 - 4,
       colWidths[index],
       boldFont,
-      10,
+      fontSize,
       COLORS.text,
     );
 
@@ -357,7 +417,9 @@ export async function generateSecurityReportPdf({
   currentY -= 28;
 
   drawRightText(page, generatedAt, PAGE_WIDTH - MARGIN_X, currentY, regularFont, 10, COLORS.subText);
-  currentY -= 26;
+  currentY -= 14;
+  drawText(page, `출력 기간: ${periodLabel}`, MARGIN_X, currentY, regularFont, 10, COLORS.subText);
+  currentY -= 20;
 
   drawText(page, '리포트 요약', MARGIN_X, currentY, boldFont, 13, COLORS.title);
   currentY -= 10;
@@ -415,18 +477,44 @@ export async function generateSecurityReportPdf({
     rgb(0.15, 0.35, 0.75),
   );
 
-  currentY -= cardHeight + 26;
+  currentY -= cardHeight + 34;
 
   drawText(page, '보안 활동 상세 내역', MARGIN_X, currentY, boldFont, 13, COLORS.title);
   currentY -= 12;
 
   const headers = ['활동명', '기한', '상태', '수행 내용', '증적 파일'];
-  const colWidths = [128, 72, 56, 150, 149];
+  const tableWidth = PAGE_WIDTH - MARGIN_X * 2;
+  const colWidths = [
+    tableWidth * 0.13,
+    tableWidth * 0.1,
+    tableWidth * 0.08,
+    tableWidth * 0.41,
+    tableWidth * 0.28,
+  ];
   const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
   const tableX = MARGIN_X;
-  const headerHeight = 22;
-  const bodyFontSize = 8;
-  const lineHeight = 11;
+  const headerHeight = 20;
+  const headerFontSize = 9;
+  const bodyFontSize = 7;
+  const baseRowHeight = 20;
+  const noteLineHeight = 8.8;
+  const imageCache = new Map<string, Uint8Array>();
+
+  const getCachedImageBytes = async (url: string) => {
+    const cached = imageCache.get(url);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`이미지 로드 실패: ${response.status}`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    imageCache.set(url, bytes);
+    return bytes;
+  };
 
   const ensureSpaceForRow = (requiredHeight: number) => {
     if (currentY - headerHeight - requiredHeight >= BOTTOM_Y) {
@@ -436,11 +524,29 @@ export async function generateSecurityReportPdf({
     page = addNewPage(pdfDoc, regularFont, periodLabel);
     currentY = TOP_Y - 20;
 
-    drawTableHeader(page, tableX, currentY, colWidths, headers, boldFont);
+    drawTableHeader(
+      page,
+      tableX,
+      currentY,
+      colWidths,
+      headers,
+      boldFont,
+      headerHeight,
+      headerFontSize,
+    );
     currentY -= headerHeight;
   };
 
-  drawTableHeader(page, tableX, currentY, colWidths, headers, boldFont);
+  drawTableHeader(
+    page,
+    tableX,
+    currentY,
+    colWidths,
+    headers,
+    boldFont,
+    headerHeight,
+    headerFontSize,
+  );
   currentY -= headerHeight;
 
   if (records.length === 0) {
@@ -459,64 +565,148 @@ export async function generateSecurityReportPdf({
     currentY -= emptyHeight;
   } else {
     for (const record of records) {
+      const files = evidenceFilesByRecord[record.id] ?? [];
+      const imageFiles = files.filter(
+        (file) => isEmbeddableImageFile(file.fileName) && !!file.thumbnailUrl,
+      );
+      const documentEvidenceNames = getDocumentEvidenceLines(files);
+
       const rowValues = [
-        record.title || '-',
+        normalizePdfText(record.title || '-'),
         formatDueMonth(record.dueDate),
         getStatusLabel(record.status),
-        record.executionNote?.trim() || '-',
-        getEvidenceText(evidenceFilesByRecord[record.id] ?? []),
+        normalizePdfText(
+          record.executionNote && record.executionNote.length > 0 ? record.executionNote : '-',
+        ),
       ];
 
-      const wrappedLines = rowValues.map((value, index) =>
-        wrapText(value, regularFont, bodyFontSize, colWidths[index] - 12),
+      const noteLines = wrapTextLines(
+        rowValues[3],
+        regularFont,
+        bodyFontSize,
+        colWidths[3] - 10,
       );
+      const evidenceLines = documentEvidenceNames.flatMap((fileName, index) => {
+        const wrapped = wrapTextLines(
+          fileName,
+          regularFont,
+          bodyFontSize,
+          colWidths[4] - 10,
+        );
 
-      const maxLineCount = Math.max(...wrappedLines.map((lines) => lines.length));
-      const rowHeight = Math.max(20, maxLineCount * lineHeight + 4);
+        if (index < documentEvidenceNames.length - 1) {
+          return [...wrapped, ''];
+        }
+
+        return wrapped;
+      });
+      const noteHeight = noteLines.length * noteLineHeight + 6;
+      const evidenceTextHeight = evidenceLines.length * noteLineHeight + 6;
+      const imageSize = colWidths[4] - 8;
+      const imageGap = 4;
+      const evidenceImageHeight =
+        imageFiles.length > 0
+          ? imageFiles.length * imageSize + (imageFiles.length - 1) * imageGap + 6
+          : 0;
+      const evidenceContentHeight =
+        evidenceTextHeight +
+        (imageFiles.length > 0 ? 4 : 0) +
+        (evidenceImageHeight > 0 ? evidenceImageHeight - 6 : 0);
+      const rowHeight = Math.max(baseRowHeight, noteHeight, evidenceContentHeight);
 
       ensureSpaceForRow(rowHeight);
 
       drawRowBorders(page, tableX, currentY, rowHeight, colWidths);
 
       let currentX = tableX;
+      const textY = currentY - rowHeight / 2 - bodyFontSize / 2 + 2;
 
-      wrappedLines.forEach((lines, index) => {
-        const textBlockHeight = lines.length * lineHeight;
-        let textY = currentY - ((rowHeight - textBlockHeight) / 2) - 11;
-
-        if (index <= 2) {
-          const color = index === 2 ? getStatusColor(record.status) : COLORS.text;
-
-          lines.forEach((line) => {
-            drawCenteredText(
-              page,
-              line,
-              currentX,
-              textY,
-              colWidths[index],
-              index === 2 ? boldFont : regularFont,
-              bodyFontSize,
-              color,
-            );
-            textY -= lineHeight;
-          });
-        } else {
-          lines.forEach((line) => {
-            drawText(
-              page,
-              line,
-              currentX + 6,
-              textY,
-              regularFont,
-              bodyFontSize,
-              COLORS.text,
-            );
-            textY -= lineHeight;
-          });
+      rowValues.forEach((value, index) => {
+        if (index === 3) {
+          currentX += colWidths[index];
+          return;
         }
+
+        const isTitle = index === 0;
+        const isStatus = index === 2;
+        const color = isStatus ? getStatusColor(record.status) : COLORS.text;
+        const fontSize = isTitle
+          ? fitSingleLineFontSize(value, regularFont, bodyFontSize, 5.5, colWidths[index] - 8)
+          : bodyFontSize;
+        const line = isTitle
+          ? value
+          : fitTextToWidth(value, regularFont, bodyFontSize, colWidths[index] - 10);
+
+        drawCenteredText(
+          page,
+          line,
+          currentX,
+          currentY - rowHeight / 2 - fontSize / 2 + 2,
+          colWidths[index],
+          isStatus ? boldFont : regularFont,
+          fontSize,
+          color,
+        );
 
         currentX += colWidths[index];
       });
+
+      const noteX = tableX + colWidths[0] + colWidths[1] + colWidths[2];
+      const noteTextBlockHeight = noteLines.length * noteLineHeight;
+      let noteY = currentY - ((rowHeight - noteTextBlockHeight) / 2) - bodyFontSize + 2;
+
+      noteLines.forEach((line) => {
+        drawText(
+          page,
+          line,
+          noteX + 4,
+          noteY,
+          regularFont,
+          bodyFontSize,
+          COLORS.text,
+        );
+        noteY -= noteLineHeight;
+      });
+
+      const evidenceX = tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3];
+      let evidenceY = currentY - 4 - bodyFontSize;
+
+      evidenceLines.forEach((line) => {
+        drawText(
+          page,
+          line,
+          evidenceX + 4,
+          evidenceY,
+          regularFont,
+          bodyFontSize,
+          COLORS.text,
+        );
+        evidenceY -= noteLineHeight;
+      });
+
+      if (imageFiles.length > 0) {
+        evidenceY -= 2;
+
+        for (const imageFile of imageFiles) {
+          try {
+            const imageBytes = await getCachedImageBytes(imageFile.thumbnailUrl!);
+            const embeddedImage = /\.png$/i.test(imageFile.fileName)
+              ? await pdfDoc.embedPng(imageBytes)
+              : await pdfDoc.embedJpg(imageBytes);
+
+            page.drawImage(embeddedImage, {
+              x: evidenceX + 4,
+              y: evidenceY - imageSize + bodyFontSize,
+              width: imageSize,
+              height: imageSize,
+            });
+          } catch (error) {
+            console.error('report evidence image embed error:', error);
+          }
+
+          evidenceY -= imageSize + imageGap;
+        }
+      }
 
       currentY -= rowHeight;
     }

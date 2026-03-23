@@ -38,27 +38,28 @@ export default function ActivityCard({ task, onClick }: ActivityCardProps) {
     task.ownerDepartment,
     task.partnerDepartment,
   );
+  const statusLabel = task.status === '예약' ? '예정' : task.status;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-xl border px-2 py-2 text-left transition hover:shadow-sm ${statusStyle.card}`}
+      className={`flex w-full flex-col items-start justify-start rounded-md border px-1.5 py-1.5 text-left shadow-[0_2px_8px_rgba(15,23,42,0.08)] transition hover:-translate-y-[1px] hover:shadow-[0_6px_12px_rgba(15,23,42,0.14)] ${statusStyle.card}`}
       style={{ fontFamily: 'KoPubDotumMedium' }}
     >
-      <div className="mb-1.5 flex items-start justify-between gap-2">
+      <div className="mb-1 flex w-full items-start justify-start gap-1.5">
         <span
-          className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none ${statusStyle.badge}`}
+          className={`inline-flex items-center justify-center rounded-md px-1 py-0.5 text-[10px] font-semibold leading-none ${statusStyle.badge}`}
         >
-          {task.status}
+          {statusLabel}
         </span>
       </div>
 
-      <div className="break-keep text-[13px] font-semibold leading-[18px] text-slate-900">
+      <div className="break-keep text-[12px] font-semibold leading-[16px] text-slate-900">
         {task.title}
       </div>
 
-      <div className="mt-1 text-[11px] leading-4 text-slate-500">
+      <div className="mt-0.5 text-[10px] leading-3.5 text-slate-500">
         {departmentLabel}
       </div>
     </button>

@@ -726,11 +726,38 @@ export function useSecurityActivityData() {
     if (!supabase) {
       throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
     }
+    const supabaseClient = supabase;
+    const {
+      data: { session: initialSession },
+      error: sessionError,
+    } = await supabaseClient.auth.getSession();
+
+    if (sessionError) {
+      console.error('auth session load error:', sessionError);
+      throw new Error('로그인 세션을 확인하지 못했습니다. 다시 로그인해 주세요.');
+    }
+
+    let session = initialSession;
+    if (!session) {
+      const { data: refreshed, error: refreshError } = await supabaseClient.auth.refreshSession();
+      if (refreshError) {
+        console.error('auth refresh session error:', refreshError);
+      }
+      session = refreshed.session ?? null;
+    }
+
+    if (!session?.user?.id) {
+      await supabaseClient.auth.signOut();
+      throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.');
+    }
+
+    const sessionEmail = session.user.email ?? userEmail ?? '';
+    const sessionUserId = session.user.id;
 
     const sanitizedFileName = file.name.replace(/[^\w.\-가-힣]/g, '_');
     const filePath = `evidence/${executionRecordId}/${Date.now()}-${sanitizedFileName}`;
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseClient.storage
       .from('evidence-files')
       .upload(filePath, file, { upsert: false });
 
@@ -739,18 +766,96 @@ export function useSecurityActivityData() {
       throw new Error(`Storage 업로드 실패: ${uploadError.message}`);
     }
 
-    const { error: insertError } = await supabase.from('evidence_file').insert({
-      execution_record_id: executionRecordId,
-      file_name: file.name,
-      file_path: filePath,
-      uploaded_by: userEmail,
-    });
+    let insertedRow: any = null;
+    let insertError: any = null;
+
+    const firstInsert = await supabaseClient
+      .from('evidence_file')
+      .insert({
+        execution_record_id: executionRecordId,
+        file_name: file.name,
+        file_path: filePath,
+        uploaded_by: sessionEmail,
+      })
+      .select('*')
+      .single();
+
+    insertedRow = firstInsert.data;
+    insertError = firstInsert.error;
+
+    if (insertError && String(insertError.message ?? '').includes('row-level security')) {
+      const secondInsert = await supabaseClient
+        .from('evidence_file')
+        .insert({
+          execution_record_id: executionRecordId,
+          file_name: file.name,
+          file_path: filePath,
+          uploaded_by: sessionUserId,
+        })
+        .select('*')
+        .single();
+
+      insertedRow = secondInsert.data;
+      insertError = secondInsert.error;
+    }
 
     if (insertError) {
       console.error('evidence_file insert error:', insertError);
+      const { error: rollbackError } = await supabaseClient.storage
+        .from('evidence-files')
+        .remove([filePath]);
+      if (rollbackError) {
+        console.error('storage rollback remove error:', rollbackError);
+      }
+
+      if (String(insertError.message ?? '').includes('row-level security')) {
+        await supabaseClient.auth.signOut();
+        throw new Error('로그인 세션이 만료되었거나 권한이 없습니다. 다시 로그인 후 시도해 주세요.');
+      }
       throw new Error(`evidence_file 저장 실패: ${insertError.message}`);
     }
 
+    if (insertedRow) {
+      const { data: evidenceRows, error: evidenceLoadError } = await supabaseClient
+        .from('evidence_file')
+        .select('*')
+        .eq('execution_record_id', executionRecordId)
+        .order('uploaded_at', { ascending: false });
+
+      if (!evidenceLoadError) {
+        const mappedRows = await Promise.all(
+          (evidenceRows ?? []).map(async (row) => {
+            let thumbnailUrl = '';
+
+            if (row.file_path) {
+              const { data: signed } = await supabaseClient.storage
+                .from('evidence-files')
+                .createSignedUrl(row.file_path, 60 * 60);
+              thumbnailUrl = signed?.signedUrl ?? '';
+            }
+
+            return {
+              id: row.id,
+              executionRecordId: row.execution_record_id,
+              fileName: row.file_name,
+              filePath: row.file_path,
+              uploadedBy: row.uploaded_by ?? null,
+              uploadedAt: row.uploaded_at,
+              thumbnailUrl,
+            } satisfies ExecutionEvidenceFile;
+          }),
+        );
+
+        setEvidenceFilesByRecord((prev) => ({
+          ...prev,
+          [executionRecordId]: mappedRows,
+        }));
+      } else {
+        console.error('evidence_file immediate load error:', evidenceLoadError);
+      }
+    }
+
+    // Keep full refresh for cross-record consistency.
     await loadEvidenceFiles();
   };
 
@@ -770,6 +875,51 @@ export function useSecurityActivityData() {
     }
 
     await loadRecords();
+  };
+
+  const deleteEvidenceFile = async (evidenceFileId: string) => {
+    if (!supabase) {
+      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    }
+
+    const supabaseClient = supabase;
+    const { data: row, error: rowError } = await supabaseClient
+      .from('evidence_file')
+      .select('id, execution_record_id, file_path')
+      .eq('id', evidenceFileId)
+      .single();
+
+    if (rowError) {
+      console.error('evidence_file load for delete error:', rowError);
+      throw new Error(rowError.message);
+    }
+
+    if (row?.file_path) {
+      const { error: storageRemoveError } = await supabaseClient.storage
+        .from('evidence-files')
+        .remove([row.file_path]);
+      if (storageRemoveError) {
+        console.error('storage remove error:', storageRemoveError);
+      }
+    }
+
+    const { error: deleteError } = await supabaseClient
+      .from('evidence_file')
+      .delete()
+      .eq('id', evidenceFileId);
+
+    if (deleteError) {
+      console.error('evidence_file delete error:', deleteError);
+      throw new Error(deleteError.message);
+    }
+
+    setEvidenceFilesByRecord((prev) => {
+      const next = { ...prev };
+      const recordId = row.execution_record_id;
+      const current = next[recordId] ?? [];
+      next[recordId] = current.filter((item) => item.id !== evidenceFileId);
+      return next;
+    });
   };
 
   const saveSecuritySettings = async (next: SecuritySettings) => {
@@ -855,6 +1005,7 @@ export function useSecurityActivityData() {
     setSelectedExecutionNote,
     updateExecutionNote,
     uploadEvidenceFile,
+    deleteEvidenceFile,
     markExecutionRecordComplete,
     reloadAll,
     loading,
