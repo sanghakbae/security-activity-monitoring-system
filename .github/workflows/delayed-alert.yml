@@ -47,26 +47,47 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SECRET_API_KEY: ${{ secrets.SUPABASE_SECRET_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
 
-          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_API_KEY:-}" ]; then
+          if [ -z "${SUPABASE_URL:-}" ]; then
             echo "Required secrets are missing."
             echo "- VITE_SUPABASE_URL"
-            echo "- SUPABASE_SECRET_API_KEY"
             exit 1
           fi
 
           FUNCTION_URL="${SUPABASE_URL%/}/functions/v1/send-delayed-alert"
-          CLEAN_SECRET_API_KEY="$(printf '%s' "${SUPABASE_SECRET_API_KEY}" | tr -d '\r\n')"
+          CLEAN_SECRET_API_KEY="$(printf '%s' "${SUPABASE_SECRET_API_KEY:-}" | tr -d '\r\n')"
+          CLEAN_SERVICE_ROLE_KEY="$(printf '%s' "${SUPABASE_SERVICE_ROLE_KEY:-}" | tr -d '\r\n')"
           echo "Calling: ${FUNCTION_URL}"
 
-          HTTP_CODE=$(curl -sS -o /tmp/function_response.txt -w "%{http_code}" \
-            -X POST "${FUNCTION_URL}" \
-            -H "Authorization: Bearer ${CLEAN_SECRET_API_KEY}" \
-            -H "apikey: ${CLEAN_SECRET_API_KEY}" \
-            -H "Content-Type: application/json" \
-            --data '{}')
+          call_function() {
+            local key="$1"
+            curl -sS -o /tmp/function_response.txt -w "%{http_code}" \
+              -X POST "${FUNCTION_URL}" \
+              -H "Authorization: Bearer ${key}" \
+              -H "apikey: ${key}" \
+              -H "Content-Type: application/json" \
+              --data '{}'
+          }
+
+          HTTP_CODE=""
+          if [ -n "${CLEAN_SECRET_API_KEY}" ]; then
+            HTTP_CODE="$(call_function "${CLEAN_SECRET_API_KEY}")"
+          fi
+
+          if [ "${HTTP_CODE:-0}" = "401" ] && [ -n "${CLEAN_SERVICE_ROLE_KEY}" ]; then
+            echo "Secret API key call returned 401; retrying with service_role key..."
+            HTTP_CODE="$(call_function "${CLEAN_SERVICE_ROLE_KEY}")"
+          fi
+
+          if [ -z "${HTTP_CODE}" ]; then
+            echo "No usable API key found. Set one of:"
+            echo "- SUPABASE_SECRET_API_KEY"
+            echo "- SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
 
           echo "Status: ${HTTP_CODE}"
           cat /tmp/function_response.txt

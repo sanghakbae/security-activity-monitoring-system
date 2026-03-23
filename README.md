@@ -205,6 +205,11 @@ GitHub Actions 스케줄러로 자동 호출합니다.
 - `SUPABASE_SECRET_API_KEY`  
   Supabase `Secret API key` (Edge Function 인증용)
 
+함수가 JWT 검증 모드(`verify_jwt=true`)이면 `Secret API key`로는 401이 발생할 수 있습니다.
+이 경우 아래 키를 추가로 등록하면 워크플로가 자동으로 재시도합니다.
+
+- `SUPABASE_SERVICE_ROLE_KEY` (fallback)
+
 ## 2. 동작 시간
 
 워크플로 파일: `.github/workflows/delayed-alert.yml`  
