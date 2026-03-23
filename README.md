@@ -213,9 +213,9 @@ GitHub Actions 스케줄러로 자동 호출합니다.
 ## 2. 동작 시간
 
 워크플로 파일: `.github/workflows/delayed-alert.yml`  
-기본 스케줄: **평일 14:00, 19:00 KST** (UTC `0 5,10 * * 1-5`)
+기본 스케줄: **평일 매분 실행** 후, DB `security_setting.google_chat_alert_times`(KST)와 일치할 때만 발송합니다.
 
-필요 시 `cron` 표현식을 수정해 주기를 변경할 수 있습니다.
+즉, 앱의 `보안 설정 > 구글챗 알람 시간`을 바꾸면 자동 발송 시간도 같이 바뀝니다.
 
 ## 3. 수동 테스트
 

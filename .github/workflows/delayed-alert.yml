@@ -2,9 +2,14 @@ name: Send Delayed Alert
 
 on:
   schedule:
-    # Weekdays 14:00 and 19:00 KST (05:00 and 10:00 UTC)
-    - cron: '0 5,10 * * 1-5'
+    # Evaluate every minute on weekdays; actual send times follow DB security_setting.google_chat_alert_times (KST).
+    - cron: '* * * * 1-5'
   workflow_dispatch:
+    inputs:
+      force_send:
+        description: 'Ignore time filter and send immediately'
+        required: false
+        default: 'false'
 
 jobs:
   send-alert:
@@ -42,8 +47,75 @@ jobs:
           print(f"KST date: {today}, is_holiday={is_holiday}")
           PY
 
+      - name: Check security setting alert times (Asia/Seoul)
+        id: time_check
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SECRET_API_KEY: ${{ secrets.SUPABASE_SECRET_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FORCE_SEND: ${{ github.event.inputs.force_send || 'false' }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          force_send = str(os.environ.get("FORCE_SEND", "false")).lower() == "true"
+          supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+          service_role = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+          secret_key = os.environ.get("SUPABASE_SECRET_API_KEY", "").strip()
+          key = service_role or secret_key
+
+          now_hm = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%H:%M")
+          configured = ["14:00", "19:00"]
+
+          if not force_send and supabase_url and key:
+            try:
+              endpoint = (
+                f"{supabase_url.rstrip('/')}/rest/v1/security_setting"
+                "?select=google_chat_alert_times&order=created_at.asc&limit=1"
+              )
+              req = urllib.request.Request(endpoint)
+              req.add_header("apikey", key)
+              req.add_header("Authorization", f"Bearer {key}")
+              with urllib.request.urlopen(req, timeout=10) as response:
+                rows = json.loads(response.read().decode("utf-8"))
+              if rows and isinstance(rows[0].get("google_chat_alert_times"), list):
+                configured = [
+                  str(item).strip()
+                  for item in rows[0]["google_chat_alert_times"]
+                  if isinstance(item, str) and item.strip()
+                ] or configured
+            except Exception as error:
+              print(f"security_setting load error: {error}")
+
+          should_send = force_send or (now_hm in configured)
+          reason = "force_send" if force_send else ("time_match" if should_send else "time_miss")
+
+          output = os.environ.get("GITHUB_OUTPUT")
+          if output:
+            with open(output, "a", encoding="utf-8") as f:
+              f.write(f"should_send={'true' if should_send else 'false'}\n")
+              f.write(f"now_hm={now_hm}\n")
+              f.write(f"reason={reason}\n")
+
+          print(
+            json.dumps(
+              {
+                "now_hm": now_hm,
+                "configured_times": configured,
+                "should_send": should_send,
+                "reason": reason,
+              },
+              ensure_ascii=False,
+            )
+          )
+          PY
+
       - name: Invoke Supabase delayed alert function
-        if: steps.holiday_check.outputs.is_holiday != 'true'
+        if: steps.holiday_check.outputs.is_holiday != 'true' && steps.time_check.outputs.should_send == 'true'
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SECRET_API_KEY: ${{ secrets.SUPABASE_SECRET_API_KEY }}
@@ -96,3 +168,11 @@ jobs:
             echo "Function call failed"
             exit 1
           fi
+
+      - name: Skip reason
+        if: steps.holiday_check.outputs.is_holiday == 'true' || steps.time_check.outputs.should_send != 'true'
+        run: |
+          echo "skip_holiday=${{ steps.holiday_check.outputs.is_holiday }}"
+          echo "should_send=${{ steps.time_check.outputs.should_send }}"
+          echo "now_hm=${{ steps.time_check.outputs.now_hm }}"
+          echo "reason=${{ steps.time_check.outputs.reason }}"
