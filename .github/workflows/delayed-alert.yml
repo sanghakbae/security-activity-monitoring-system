@@ -58,12 +58,13 @@ jobs:
           fi
 
           FUNCTION_URL="${SUPABASE_URL%/}/functions/v1/send-delayed-alert"
+          CLEAN_ANON_KEY="$(printf '%s' "${SUPABASE_ANON_KEY}" | tr -d '\r\n')"
           echo "Calling: ${FUNCTION_URL}"
 
           HTTP_CODE=$(curl -sS -o /tmp/function_response.txt -w "%{http_code}" \
             -X POST "${FUNCTION_URL}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${CLEAN_ANON_KEY}" \
+            -H "apikey: ${CLEAN_ANON_KEY}" \
             -H "Content-Type: application/json" \
             --data '{}')
 
