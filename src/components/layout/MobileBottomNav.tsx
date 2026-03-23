@@ -4,6 +4,7 @@ import {
   ClipboardPlus,
   FileText,
   LayoutDashboard,
+  Shield,
 } from 'lucide-react';
 import type { AppMenu } from '@/types';
 
@@ -22,12 +23,13 @@ const items: Array<{
   { key: 'register', label: '활동등록', icon: ClipboardPlus },
   { key: 'execution', label: '수행관리', icon: CheckCircle2 },
   { key: 'report', label: '리포트', icon: FileText },
+  { key: 'security', label: '보안설정', icon: Shield },
 ];
 
 export default function MobileBottomNav({ activeMenu, setActiveMenu }: MobileBottomNavProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
-      <div className="grid grid-cols-5 gap-1">
+      <div className="grid grid-cols-6 gap-1">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = activeMenu === item.key;

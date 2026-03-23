@@ -5,6 +5,7 @@ import type {
   DashboardTask,
   ExecutionEvidenceFile,
   ExecutionRecord,
+  SecuritySettings,
 } from '@/types';
 
 function buildDashboardTasksFromRecords(records: ExecutionRecord[]): DashboardTask[] {
@@ -112,6 +113,31 @@ function getScheduleDatesByFrequency(
   return scheduleDates;
 }
 
+const defaultSecuritySettings: SecuritySettings = {
+  allowedEmailDomain: 'muhayu.com',
+  sessionTimeoutMinutes: 60,
+  googleChatAlertTimes: ['14:00', '19:00'],
+};
+
+function mapSecuritySettings(row: any): SecuritySettings {
+  return {
+    allowedEmailDomain:
+      typeof row.allowed_email_domain === 'string' && row.allowed_email_domain.trim() !== ''
+        ? row.allowed_email_domain
+        : defaultSecuritySettings.allowedEmailDomain,
+    sessionTimeoutMinutes:
+      typeof row.session_timeout_minutes === 'number' && row.session_timeout_minutes > 0
+        ? row.session_timeout_minutes
+        : defaultSecuritySettings.sessionTimeoutMinutes,
+    googleChatAlertTimes: Array.isArray(row.google_chat_alert_times)
+      ? row.google_chat_alert_times.filter(
+          (item: unknown): item is string =>
+            typeof item === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(item),
+        )
+      : defaultSecuritySettings.googleChatAlertTimes,
+  };
+}
+
 export function useSecurityActivityData() {
   const [masters, setMasters] = useState<ActivityMaster[]>([]);
   const [records, setRecords] = useState<ExecutionRecord[]>([]);
@@ -123,6 +149,7 @@ export function useSecurityActivityData() {
   const [keyword, setKeyword] = useState('');
   const [executionPage, setExecutionPage] = useState(1);
   const [catalogPage, setCatalogPage] = useState(1);
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettings>(defaultSecuritySettings);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -245,6 +272,44 @@ export function useSecurityActivityData() {
     setEvidenceFilesByRecord(grouped);
   };
 
+  const loadSecuritySettings = async () => {
+    if (!supabase) return;
+
+    const { data, error } = await supabase
+      .from('security_setting')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    if (error) {
+      console.error('security_setting load error:', error);
+      return;
+    }
+
+    const first = (data ?? [])[0];
+    if (!first) {
+      const { data: inserted, error: insertError } = await supabase
+        .from('security_setting')
+        .insert({
+          allowed_email_domain: defaultSecuritySettings.allowedEmailDomain,
+          session_timeout_minutes: defaultSecuritySettings.sessionTimeoutMinutes,
+          google_chat_alert_times: defaultSecuritySettings.googleChatAlertTimes,
+        })
+        .select('*')
+        .single();
+
+      if (insertError) {
+        console.error('security_setting insert error:', insertError);
+        return;
+      }
+
+      setSecuritySettings(mapSecuritySettings(inserted));
+      return;
+    }
+
+    setSecuritySettings(mapSecuritySettings(first));
+  };
+
   const reloadAll = async () => {
     if (!supabase) {
       setLoading(false);
@@ -252,7 +317,7 @@ export function useSecurityActivityData() {
     }
 
     setLoading(true);
-    await Promise.all([loadMasters(), loadRecords(), loadEvidenceFiles()]);
+    await Promise.all([loadMasters(), loadRecords(), loadEvidenceFiles(), loadSecuritySettings()]);
     setLoading(false);
   };
 
@@ -679,6 +744,54 @@ export function useSecurityActivityData() {
     await loadRecords();
   };
 
+  const saveSecuritySettings = async (next: SecuritySettings) => {
+    if (!supabase) {
+      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    }
+
+    const payload = {
+      allowed_email_domain: next.allowedEmailDomain.trim().toLowerCase(),
+      session_timeout_minutes: Math.max(5, Math.min(10080, Math.floor(next.sessionTimeoutMinutes))),
+      google_chat_alert_times: next.googleChatAlertTimes,
+    };
+
+    const { data: currentRows, error: currentError } = await supabase
+      .from('security_setting')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    if (currentError) {
+      console.error('security_setting current load error:', currentError);
+      throw new Error(currentError.message);
+    }
+
+    const current = (currentRows ?? [])[0];
+
+    if (!current) {
+      const { error: insertError } = await supabase.from('security_setting').insert(payload);
+      if (insertError) {
+        console.error('security_setting insert error:', insertError);
+        throw new Error(insertError.message);
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('security_setting')
+        .update(payload)
+        .eq('id', current.id);
+      if (updateError) {
+        console.error('security_setting update error:', updateError);
+        throw new Error(updateError.message);
+      }
+    }
+
+    setSecuritySettings({
+      allowedEmailDomain: payload.allowed_email_domain,
+      sessionTimeoutMinutes: payload.session_timeout_minutes,
+      googleChatAlertTimes: payload.google_chat_alert_times,
+    });
+  };
+
   return {
     now,
     masters,
@@ -717,5 +830,8 @@ export function useSecurityActivityData() {
     markExecutionRecordComplete,
     reloadAll,
     loading,
+    securitySettings,
+    setSecuritySettings,
+    saveSecuritySettings,
   };
 }

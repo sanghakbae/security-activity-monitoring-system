@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-export type AppMenu = 'dashboard' | 'catalog' | 'register' | 'execution' | 'report';
+export type AppMenu = 'dashboard' | 'catalog' | 'register' | 'execution' | 'report' | 'security';
 export type ActivityFrequency = '수시' | '월간' | '분기' | '반기' | '연 1회';
 export type ActivityStatus = '예약' | '진행중' | '완료' | '지연';
 
@@ -58,4 +58,10 @@ export type MenuItem = {
 export type AuthState = {
   authenticated: boolean;
   email: string | null;
+};
+
+export type SecuritySettings = {
+  allowedEmailDomain: string;
+  sessionTimeoutMinutes: number;
+  googleChatAlertTimes: string[];
 };

@@ -6,6 +6,7 @@ import {
   ClipboardPlus,
   FileText,
   LayoutDashboard,
+  Shield,
 } from 'lucide-react';
 import type { AppMenu } from '@/types';
 
@@ -26,6 +27,7 @@ const sidebarItems: Array<{
   { key: 'register', label: '보안 활동 등록', icon: ClipboardPlus },
   { key: 'execution', label: '수행 및 증적 관리', icon: CheckCircle2 },
   { key: 'report', label: '리포트 생성', icon: FileText },
+  { key: 'security', label: '보안 설정', icon: Shield },
 ];
 
 export default function Sidebar({

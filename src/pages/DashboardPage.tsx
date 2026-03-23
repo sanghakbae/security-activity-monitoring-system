@@ -8,6 +8,7 @@ import CatalogPage from '@/pages/CatalogPage';
 import ExecutionPage from '@/pages/ExecutionPage';
 import RegisterPage from '@/pages/RegisterPage';
 import ReportPage from '@/pages/ReportPage';
+import SecuritySettingsPage from '@/pages/SecuritySettingsPage';
 import { useSecurityActivityData } from '@/hooks/useSecurityActivityData';
 import type { AppMenu, ActivityMaster, ExecutionRecord } from '@/types';
 import { formatNow } from '@/utils/date';
@@ -76,6 +77,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
     uploadEvidenceFile,
     markExecutionRecordComplete,
     loading,
+    securitySettings,
+    setSecuritySettings,
+    saveSecuritySettings,
   } = useSecurityActivityData();
 
   const defaultStartMonth = useMemo(() => `${now.getFullYear()}-01`, [now]);
@@ -96,7 +100,9 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
           ? '보안 활동 등록'
           : activeMenu === 'execution'
             ? '수행 및 증적 관리'
-            : '리포트 생성';
+            : activeMenu === 'report'
+              ? '리포트 생성'
+              : '보안 설정';
 
   const fallbackExecutionRecord = useMemo<ExecutionRecord>(
     () => ({
@@ -553,6 +559,14 @@ export default function DashboardPage({ userEmail, onLogout }: DashboardPageProp
               <ReportPage
                 records={records}
                 evidenceFilesByRecord={evidenceFilesByRecord}
+              />
+            )}
+
+            {activeMenu === 'security' && (
+              <SecuritySettingsPage
+                settings={securitySettings}
+                onChange={setSecuritySettings}
+                onSave={saveSecuritySettings}
               />
             )}
           </div>

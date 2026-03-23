@@ -6,6 +6,16 @@ export type AuthState = {
   email: string | null;
 };
 
+type RuntimeSecuritySettings = {
+  allowedEmailDomain: string;
+  sessionTimeoutMinutes: number;
+};
+
+const defaultRuntimeSecuritySettings: RuntimeSecuritySettings = {
+  allowedEmailDomain: ALLOWED_DOMAIN,
+  sessionTimeoutMinutes: 60,
+};
+
 function getBaseUrl() {
   if (typeof window === 'undefined') {
     return '';
@@ -17,6 +27,57 @@ function getBaseUrl() {
   return `${window.location.origin}${normalizedBase}`;
 }
 
+function decodeJwtPayload(token: string) {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+
+    const payload = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=');
+
+    const decoded = atob(payload);
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch (error) {
+    console.error('decodeJwtPayload error:', error);
+    return null;
+  }
+}
+
+async function loadRuntimeSecuritySettings(): Promise<RuntimeSecuritySettings> {
+  if (!supabase) {
+    return defaultRuntimeSecuritySettings;
+  }
+
+  const { data, error } = await supabase
+    .from('security_setting')
+    .select('allowed_email_domain, session_timeout_minutes')
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (error) {
+    console.error('security_setting load for auth error:', error);
+    return defaultRuntimeSecuritySettings;
+  }
+
+  const row = (data ?? [])[0];
+  if (!row) {
+    return defaultRuntimeSecuritySettings;
+  }
+
+  return {
+    allowedEmailDomain:
+      typeof row.allowed_email_domain === 'string' && row.allowed_email_domain.trim() !== ''
+        ? row.allowed_email_domain
+        : defaultRuntimeSecuritySettings.allowedEmailDomain,
+    sessionTimeoutMinutes:
+      typeof row.session_timeout_minutes === 'number' && row.session_timeout_minutes > 0
+        ? row.session_timeout_minutes
+        : defaultRuntimeSecuritySettings.sessionTimeoutMinutes,
+  };
+}
+
 export async function signInWithGoogle() {
   if (AUTH_MODE === 'mock') {
     return;
@@ -26,6 +87,7 @@ export async function signInWithGoogle() {
     throw new Error('Supabase client is not initialized.');
   }
 
+  const runtimeSettings = await loadRuntimeSecuritySettings();
   const redirectTo = `${getBaseUrl()}/auth/callback`;
 
   const { error } = await supabase.auth.signInWithOAuth({
@@ -33,7 +95,7 @@ export async function signInWithGoogle() {
     options: {
       redirectTo,
       queryParams: {
-        hd: ALLOWED_DOMAIN,
+        hd: runtimeSettings.allowedEmailDomain,
         prompt: 'select_account',
       },
     },
@@ -99,14 +161,39 @@ export async function validateCurrentUser(): Promise<AuthState> {
 
   const email = session.user.email;
   const domain = email.split('@')[1]?.toLowerCase() ?? '';
+  const runtimeSettings = await loadRuntimeSecuritySettings();
 
-  if (domain !== ALLOWED_DOMAIN.toLowerCase()) {
+  if (domain !== runtimeSettings.allowedEmailDomain.toLowerCase()) {
     await signOut();
 
     return {
       authenticated: false,
       email: null,
     };
+  }
+
+  const timeoutSeconds = runtimeSettings.sessionTimeoutMinutes * 60;
+  const accessToken =
+    session && typeof session === 'object' && 'access_token' in session
+      ? String((session as { access_token?: string }).access_token ?? '')
+      : '';
+  const payload = decodeJwtPayload(accessToken);
+  const iat =
+    payload && typeof payload.iat === 'number'
+      ? payload.iat
+      : payload && typeof payload.iat === 'string'
+        ? Number(payload.iat)
+        : null;
+
+  if (iat && Number.isFinite(iat)) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (nowSeconds - iat > timeoutSeconds) {
+      await signOut();
+      return {
+        authenticated: false,
+        email: null,
+      };
+    }
   }
 
   return {
