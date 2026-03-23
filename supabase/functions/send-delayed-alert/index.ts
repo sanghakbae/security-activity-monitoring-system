@@ -52,28 +52,18 @@ Deno.serve(async () => {
     console.log('[send-delayed-alert] webhook configured');
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-    const { error: syncError } = await supabase.rpc('mark_delayed_execution_records');
-
-    if (syncError) {
-      console.error('[send-delayed-alert] delayed sync error:', syncError.message);
-      return new Response(
-        JSON.stringify({ error: syncError.message }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-    }
 
     const now = new Date();
     const targetYear = now.getFullYear();
     const targetYearStart = `${targetYear}-01-01`;
     const targetYearEnd = `${targetYear}-12-31`;
+    const currentMonthStart = `${targetYear}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
     const { data, error } = await supabase
       .from('execution_record')
       .select('title, owner_department, partner_department, due_date, status')
-      .eq('status', '지연')
+      .neq('status', '완료')
+      .lt('due_date', currentMonthStart)
       .gte('due_date', targetYearStart)
       .lte('due_date', targetYearEnd)
       .order('due_date', { ascending: true });

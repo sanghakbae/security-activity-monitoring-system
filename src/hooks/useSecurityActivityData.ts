@@ -161,7 +161,17 @@ export function useSecurityActivityData() {
   const syncDelayedStatuses = async () => {
     if (!supabase) return;
 
-    const { error } = await supabase.rpc('mark_delayed_execution_records');
+    const today = new Date();
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentMonthStartText = `${currentMonthStart.getFullYear()}-${String(
+      currentMonthStart.getMonth() + 1,
+    ).padStart(2, '0')}-01`;
+
+    const { error } = await supabase
+      .from('execution_record')
+      .update({ status: '지연' })
+      .neq('status', '완료')
+      .lt('due_date', currentMonthStartText);
 
     if (error) {
       console.error('execution_record delayed sync error:', error);
