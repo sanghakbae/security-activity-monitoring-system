@@ -71,15 +71,14 @@ Supabase Auth의 Google OAuth를 사용합니다.
 - 설정된 세션 유지 시간 초과 시 로그아웃 처리
 - 개발/테스트용 mock auth 모드 지원
 
-### 지연 활동 알림
+### 지연 활동 상태 확인
 
-기한이 지난 보안 활동이 있으면 Google Chat으로 알림을 전송합니다.
+기한이 지난 보안 활동은 앱 화면에서 지연 상태로 확인할 수 있습니다.
 
-- Supabase Edge Function: `send-delayed-alert`
-- Supabase DB cron: 5분 주기로 Edge Function 호출
-- 앱의 보안 설정에 저장된 발송 시각과 일치할 때만 실제 발송
-- Asia/Seoul 기준 주말과 대한민국 공휴일에는 발송하지 않음
-- GitHub Actions 수동 실행 workflow로 테스트 가능
+- 대시보드 지연 건수 표시
+- 수행 목록 지연 필터
+- PDF 리포트의 미완료/지연 건수 표시
+- Google Chat 자동 알림은 현재 비활성화됨
 
 ### PDF 리포트
 
@@ -141,9 +140,6 @@ flowchart LR
   Storage --> EvidenceStorage["evidence-files bucket"]
 
   DB --> Cron["pg_cron / pg_net"]
-  Cron --> EdgeFunction["send-delayed-alert Edge Function"]
-  EdgeFunction --> GoogleChat["Google Chat Webhook"]
-
   GitHub["GitHub main branch"] --> Actions["GitHub Actions"]
   Actions --> Pages["GitHub Pages"]
 ```
@@ -153,8 +149,7 @@ flowchart LR
 ```text
 .
 ├── .github/workflows
-│   ├── deploy.yml
-│   └── delayed-alert.yml
+│   └── deploy.yml
 ├── public
 │   ├── 404.html
 │   └── fonts
@@ -237,6 +232,7 @@ npm run build
 005_supabase_cron_delayed_alert.sql
 006_fix_evidence_file_rls.sql
 007_fix_evidence_upload_rls_storage.sql
+008_disable_delayed_alert_cron.sql
 ```
 
 ### Storage
@@ -247,7 +243,7 @@ npm run build
 
 ### Edge Function
 
-지연 알림 함수 위치:
+기존 지연 알림 함수 위치:
 
 ```text
 supabase/functions/send-delayed-alert/index.ts
@@ -260,13 +256,18 @@ supabase/functions/send-delayed-alert/index.ts
 verify_jwt = false
 ```
 
+현재 이 함수는 Google Chat을 호출하지 않고 비활성화 응답만 반환합니다.
+
 배포 예시:
 
 ```bash
 supabase functions deploy send-delayed-alert
 ```
 
-Supabase 프로젝트에는 다음 환경 변수가 필요합니다.
+Google Chat 알림을 다시 활성화하지 않는 한, 이 함수에는 Google Chat webhook
+환경 변수가 필요하지 않습니다.
+
+기존 알림 기능을 다시 활성화할 때 필요했던 환경 변수는 다음과 같습니다.
 
 ```text
 SUPABASE_URL
@@ -274,34 +275,44 @@ SUPABASE_SERVICE_ROLE_KEY
 GOOGLE_CHAT_WEBHOOK_URL
 ```
 
-## 지연 알림 동작 방식
+## Google Chat 알림 비활성화
 
-지연 알림은 두 가지 경로로 실행할 수 있습니다.
+Google Chat 지연 알림은 현재 비활성화되어 있습니다.
 
-### Supabase cron 자동 실행
+비활성화는 세 단계로 처리합니다.
 
-`005_supabase_cron_delayed_alert.sql`은 `pg_cron`과 `pg_net`을 사용해
-`send-delayed-alert-every-5m` 작업을 생성합니다.
+1. `.github/workflows/delayed-alert.yml` 제거
+2. `send-delayed-alert` Edge Function을 no-op 응답으로 변경
+3. `008_disable_delayed_alert_cron.sql`로 Supabase cron 작업 해제
 
-cron은 5분마다 Edge Function을 호출하지만, 함수 내부에서 아래 조건을 확인한
-뒤 실제 Google Chat 메시지를 보냅니다.
+중요: 이미 Supabase DB에 등록된 cron 작업은 GitHub에 코드를 push하는 것만으로
+자동 삭제되지 않습니다. 운영 Supabase 프로젝트에 아래 마이그레이션을 반드시
+적용해야 5분마다 호출되던 `send-delayed-alert-every-5m` 작업이 중지됩니다.
 
-- Asia/Seoul 기준 평일
-- 대한민국 공휴일 아님
-- 현재 시각이 `security_setting.google_chat_alert_times`에 포함됨
-- 지연된 수행 레코드가 존재함
+```text
+supabase/migrations/008_disable_delayed_alert_cron.sql
+```
 
-### GitHub Actions 수동 실행
+운영 DB에서 직접 확인/해제할 때 사용할 수 있는 SQL:
 
-`.github/workflows/delayed-alert.yml`은 `workflow_dispatch` 방식의 수동 실행
-workflow입니다.
+```sql
+select jobid, jobname, schedule, command
+from cron.job
+where jobname = 'send-delayed-alert-every-5m';
+```
 
-GitHub 저장소의 Actions 탭에서 `Send Delayed Alert` workflow를 선택한 뒤
-`Run workflow`로 실행할 수 있습니다. `force_send=true` 입력값을 사용하면 시간
-조건을 무시하고 즉시 테스트할 수 있습니다.
+```sql
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'send-delayed-alert-every-5m';
+```
 
-이 workflow는 배포용 workflow가 아니라 지연 알림 함수 호출을 수동으로 검증하기
-위한 보조 workflow입니다.
+Edge Function도 운영 Supabase에 다시 배포해야 기존 함수 코드가 Google Chat을
+호출하지 않습니다.
+
+```bash
+supabase functions deploy send-delayed-alert
+```
 
 ## GitHub Pages 배포
 
@@ -375,8 +386,8 @@ GitHub Pages는 SPA 라우팅을 직접 알지 못합니다. 이 저장소는 `p
 - 허용 이메일 도메인 설정 확인
 - 증적 파일 업로드 및 썸네일 표시 확인
 - PDF 리포트 생성 확인
-- `send-delayed-alert` Edge Function 수동 호출 확인
-- Google Chat Webhook 수신 확인
+- `send-delayed-alert-every-5m` cron 작업이 없는지 확인
+- `send-delayed-alert` Edge Function이 비활성화 응답을 반환하는지 확인
 
 ## 유용한 명령어
 
@@ -399,9 +410,9 @@ supabase functions deploy send-delayed-alert
 - 이 저장소는 GitHub Pages 배포를 전제로 Vite base 경로를 설정합니다.
 - GitHub Actions workflow 파일은 저장소에 포함되어 있으므로, 일반적인 코드
   수정 후에는 커밋을 `main`에 push하는 것만으로 배포가 시작됩니다.
-- 지연 알림의 자동 실행은 GitHub Actions 배포와 별개입니다. 실제 정기 실행은
-  Supabase cron이 담당하고, GitHub Actions의 `Send Delayed Alert`는 수동 검증
-  용도입니다.
+- 지연 알림의 자동 실행은 GitHub Actions 배포와 별개였습니다. 현재는
+  Supabase cron 해제 마이그레이션과 no-op Edge Function으로 Google Chat 알림을
+  비활성화한 상태입니다.
 - 운영 dependency 중 `jspdf@2.5.2`가 취약한 `dompurify` 버전을 포함한다는
   `npm audit` 경고가 있습니다. `jspdf` 주요 버전 업그레이드는 PDF 출력 회귀
   확인과 함께 별도 작업으로 처리하는 것이 좋습니다.
