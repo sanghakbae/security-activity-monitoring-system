@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { AuthState, signInWithGoogle, validateCurrentUser } from '@/auth/auth';
 import { ALLOWED_DOMAIN } from '@/lib/env';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
 
 type LoginPageProps = {
   onLogin: (state: AuthState) => void;
@@ -29,22 +30,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   useEffect(() => {
     const loadAllowedDomain = async () => {
-      if (!supabase) return;
+      if (!db) return;
 
-      const { data, error } = await supabase
-        .from('security_setting')
-        .select('allowed_email_domain')
-        .order('created_at', { ascending: true })
-        .limit(1);
+      try {
+        const snapshot = await getDocs(
+          query(collection(db, 'security_setting'), orderBy('created_at', 'asc'), limit(1)),
+        );
 
-      if (error) {
+        const domain = snapshot.docs[0]?.data()?.allowed_email_domain;
+        if (typeof domain === 'string' && domain.trim() !== '') {
+          setAllowedDomainText(formatAllowedDomainText(domain));
+        }
+      } catch (error) {
         console.error('security_setting load for login error:', error);
-        return;
-      }
-
-      const domain = data?.[0]?.allowed_email_domain;
-      if (typeof domain === 'string' && domain.trim() !== '') {
-        setAllowedDomainText(formatAllowedDomainText(domain));
       }
     };
 

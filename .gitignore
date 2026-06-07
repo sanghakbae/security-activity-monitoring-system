@@ -2,3 +2,13 @@ node_modules
 dist
 .DS_Store
 *.log
+
+# Local environment & secrets
+.env
+.env.*
+!.env.example
+
+# Firebase service account keys
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+.firebase

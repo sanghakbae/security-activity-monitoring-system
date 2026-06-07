@@ -1,4 +1,13 @@
-import { supabase } from '@/lib/supabase';
+import {
+  GoogleAuthProvider,
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithRedirect,
+  signOut as firebaseSignOut,
+  type User,
+} from 'firebase/auth';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env';
 
 export type AuthState = {
@@ -33,66 +42,61 @@ function parseAllowedEmailDomains(value: unknown): string[] {
   return unique;
 }
 
-function getBaseUrl() {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  const base = import.meta.env.BASE_URL ?? '/';
-  const normalizedBase =
-    base === '/' || base === '' ? '' : base.endsWith('/') ? base.slice(0, -1) : base;
-  return `${window.location.origin}${normalizedBase}`;
-}
-
-function decodeJwtPayload(token: string) {
-  try {
-    const parts = token.split('.');
-    if (parts.length < 2) return null;
-
-    const payload = parts[1]
-      .replace(/-/g, '+')
-      .replace(/_/g, '/')
-      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=');
-
-    const decoded = atob(payload);
-    return JSON.parse(decoded) as Record<string, unknown>;
-  } catch (error) {
-    console.error('decodeJwtPayload error:', error);
-    return null;
-  }
-}
-
 async function loadRuntimeSecuritySettings(): Promise<RuntimeSecuritySettings> {
-  if (!supabase) {
+  if (!db) {
     return defaultRuntimeSecuritySettings;
   }
 
-  const { data, error } = await supabase
-    .from('security_setting')
-    .select('allowed_email_domain, session_timeout_minutes')
-    .order('created_at', { ascending: true })
-    .limit(1);
+  try {
+    const snapshot = await getDocs(
+      query(collection(db, 'security_setting'), orderBy('created_at', 'asc'), limit(1)),
+    );
 
-  if (error) {
+    const row = snapshot.docs[0]?.data();
+    if (!row) {
+      return defaultRuntimeSecuritySettings;
+    }
+
+    return {
+      allowedEmailDomains:
+        parseAllowedEmailDomains(row.allowed_email_domain).length > 0
+          ? parseAllowedEmailDomains(row.allowed_email_domain)
+          : defaultRuntimeSecuritySettings.allowedEmailDomains,
+      sessionTimeoutMinutes:
+        typeof row.session_timeout_minutes === 'number' && row.session_timeout_minutes > 0
+          ? row.session_timeout_minutes
+          : defaultRuntimeSecuritySettings.sessionTimeoutMinutes,
+    };
+  } catch (error) {
     console.error('security_setting load for auth error:', error);
     return defaultRuntimeSecuritySettings;
   }
+}
 
-  const row = (data ?? [])[0];
-  if (!row) {
-    return defaultRuntimeSecuritySettings;
+/**
+ * Resolve the current Firebase user once the SDK has finished restoring the
+ * persisted session. onAuthStateChanged fires with the initial state, after
+ * which we immediately unsubscribe.
+ */
+function waitForAuthUser(): Promise<User | null> {
+  const authInstance = auth;
+  if (!authInstance) {
+    return Promise.resolve(null);
   }
 
-  return {
-    allowedEmailDomains:
-      parseAllowedEmailDomains(row.allowed_email_domain).length > 0
-        ? parseAllowedEmailDomains(row.allowed_email_domain)
-        : defaultRuntimeSecuritySettings.allowedEmailDomains,
-    sessionTimeoutMinutes:
-      typeof row.session_timeout_minutes === 'number' && row.session_timeout_minutes > 0
-        ? row.session_timeout_minutes
-        : defaultRuntimeSecuritySettings.sessionTimeoutMinutes,
-  };
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(
+      authInstance,
+      (user) => {
+        unsubscribe();
+        resolve(user);
+      },
+      () => {
+        unsubscribe();
+        resolve(null);
+      },
+    );
+  });
 }
 
 export async function signInWithGoogle() {
@@ -100,28 +104,20 @@ export async function signInWithGoogle() {
     return;
   }
 
-  if (!supabase) {
-    throw new Error('Supabase client is not initialized.');
+  if (!auth) {
+    throw new Error('Firebase Auth가 초기화되지 않았습니다.');
   }
 
   const runtimeSettings = await loadRuntimeSecuritySettings();
-  const redirectTo = `${getBaseUrl()}/auth/callback`;
   const primaryDomain = runtimeSettings.allowedEmailDomains[0] ?? ALLOWED_DOMAIN;
 
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo,
-      queryParams: {
-        hd: primaryDomain,
-        prompt: 'select_account',
-      },
-    },
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({
+    hd: primaryDomain,
+    prompt: 'select_account',
   });
 
-  if (error) {
-    throw error;
-  }
+  await signInWithRedirect(auth, provider);
 }
 
 export async function signOut() {
@@ -129,55 +125,35 @@ export async function signOut() {
     return;
   }
 
-  if (!supabase) {
+  if (!auth) {
     return;
   }
 
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    throw error;
-  }
-}
-
-export async function getSession() {
-  if (AUTH_MODE === 'mock') {
-    return {
-      session: {
-        user: {
-          email: `test@${ALLOWED_DOMAIN}`,
-        },
-      },
-    };
-  }
-
-  if (!supabase) {
-    return { session: null };
-  }
-
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-
-  if (error) {
-    throw error;
-  }
-
-  return { session };
+  await firebaseSignOut(auth);
 }
 
 export async function validateCurrentUser(): Promise<AuthState> {
-  const { session } = await getSession();
+  if (AUTH_MODE === 'mock') {
+    return {
+      authenticated: true,
+      email: `test@${ALLOWED_DOMAIN}`,
+    };
+  }
 
-  if (!session?.user?.email) {
+  if (!auth) {
+    return { authenticated: false, email: null };
+  }
+
+  const user = await waitForAuthUser();
+
+  if (!user?.email) {
     return {
       authenticated: false,
       email: null,
     };
   }
 
-  const email = session.user.email;
+  const email = user.email;
   const domain = email.split('@')[1]?.toLowerCase() ?? '';
   const runtimeSettings = await loadRuntimeSecuritySettings();
 
@@ -191,27 +167,23 @@ export async function validateCurrentUser(): Promise<AuthState> {
   }
 
   const timeoutSeconds = runtimeSettings.sessionTimeoutMinutes * 60;
-  const accessToken =
-    session && typeof session === 'object' && 'access_token' in session
-      ? String((session as { access_token?: string }).access_token ?? '')
-      : '';
-  const payload = decodeJwtPayload(accessToken);
-  const iat =
-    payload && typeof payload.iat === 'number'
-      ? payload.iat
-      : payload && typeof payload.iat === 'string'
-        ? Number(payload.iat)
-        : null;
 
-  if (iat && Number.isFinite(iat)) {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    if (nowSeconds - iat > timeoutSeconds) {
-      await signOut();
-      return {
-        authenticated: false,
-        email: null,
-      };
+  try {
+    const tokenResult = await user.getIdTokenResult();
+    const authTimeSeconds = Math.floor(new Date(tokenResult.authTime).getTime() / 1000);
+
+    if (Number.isFinite(authTimeSeconds)) {
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (nowSeconds - authTimeSeconds > timeoutSeconds) {
+        await signOut();
+        return {
+          authenticated: false,
+          email: null,
+        };
+      }
     }
+  } catch (error) {
+    console.error('id token resolve error:', error);
   }
 
   return {
@@ -221,5 +193,13 @@ export async function validateCurrentUser(): Promise<AuthState> {
 }
 
 export async function handleAuthCallback(): Promise<AuthState> {
+  if (auth) {
+    try {
+      await getRedirectResult(auth);
+    } catch (error) {
+      console.error('getRedirectResult error:', error);
+    }
+  }
+
   return validateCurrentUser();
 }

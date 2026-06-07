@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "evidence_file",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "execution_record_id", "order": "ASCENDING" },
+        { "fieldPath": "uploaded_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

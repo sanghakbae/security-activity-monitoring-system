@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Mirrors the previous Supabase RLS: any authenticated user has full access.
+// Domain restriction & session timeout are enforced client-side in src/auth/auth.ts.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /activity_master/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /execution_record/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /evidence_file/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /security_setting/{docId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

@@ -1,5 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
+import {
+  deleteObject,
+  getDownloadURL,
+  ref as storageRef,
+  uploadBytes,
+} from 'firebase/storage';
+import { auth, db, storage } from '@/lib/firebase';
 import type {
   ActivityMaster,
   DashboardTask,
@@ -28,6 +49,15 @@ function buildDashboardTasksFromRecords(records: ExecutionRecord[]): DashboardTa
       if (dateCompare !== 0) return dateCompare;
       return a.title.localeCompare(b.title);
     });
+}
+
+/** Firestore 'in' / 'array-contains-any' queries accept at most 30 values. */
+function chunk<T>(items: T[], size = 30): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
 }
 
 function mapMaster(row: any): ActivityMaster {
@@ -177,7 +207,7 @@ export function useSecurityActivityData() {
   }, []);
 
   const syncDelayedStatuses = async () => {
-    if (!supabase) return;
+    if (!db) return;
 
     const today = new Date();
     const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -185,161 +215,155 @@ export function useSecurityActivityData() {
       currentMonthStart.getMonth() + 1,
     ).padStart(2, '0')}-01`;
 
-    const { error } = await supabase
-      .from('execution_record')
-      .update({ status: '지연' })
-      .neq('status', '완료')
-      .lt('due_date', currentMonthStartText);
+    try {
+      // due_date is stored as an ISO 'YYYY-MM-DD' string, so lexicographic
+      // ordering matches chronological ordering.
+      const snapshot = await getDocs(
+        query(collection(db, 'execution_record'), where('due_date', '<', currentMonthStartText)),
+      );
 
-    if (error) {
+      const overdue = snapshot.docs.filter((d) => d.data().status !== '완료');
+      if (overdue.length === 0) return;
+
+      const batch = writeBatch(db);
+      overdue.forEach((d) => batch.update(d.ref, { status: '지연' }));
+      await batch.commit();
+    } catch (error) {
       console.error('execution_record delayed sync error:', error);
     }
   };
 
   const loadMasters = async () => {
-    if (!supabase) return;
+    if (!db) return;
 
-    const { data, error } = await supabase
-      .from('activity_master')
-      .select('*')
-      .order('created_at', { ascending: true });
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, 'activity_master'), orderBy('created_at', 'asc')),
+      );
 
-    if (error) {
+      const mapped = snapshot.docs.map((d) => mapMaster({ id: d.id, ...d.data() }));
+      setMasters(mapped);
+
+      if (mapped.length > 0) {
+        setSelectedMasterId((prev) => {
+          const exists = mapped.some((item) => item.id === prev);
+          return exists ? prev : mapped[0].id;
+        });
+      } else {
+        setSelectedMasterId('');
+      }
+    } catch (error) {
       console.error('activity_master load error:', error);
-      return;
-    }
-
-    const mapped = (data ?? []).map(mapMaster);
-    setMasters(mapped);
-
-    if (mapped.length > 0) {
-      setSelectedMasterId((prev) => {
-        const exists = mapped.some((item) => item.id === prev);
-        return exists ? prev : mapped[0].id;
-      });
-    } else {
-      setSelectedMasterId('');
     }
   };
 
   const loadRecords = async () => {
-    if (!supabase) return;
+    if (!db) return;
 
     await syncDelayedStatuses();
 
-    const { data, error } = await supabase
-      .from('execution_record')
-      .select('*')
-      .order('due_date', { ascending: true });
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, 'execution_record'), orderBy('due_date', 'asc')),
+      );
 
-    if (error) {
+      const mapped = snapshot.docs.map((d) => mapRecord({ id: d.id, ...d.data() }));
+      setRecords(mapped);
+
+      if (mapped.length > 0) {
+        setSelectedExecutionRecordId((prev) => {
+          const exists = mapped.some((item) => item.id === prev);
+          return exists ? prev : mapped[0].id;
+        });
+      } else {
+        setSelectedExecutionRecordId('');
+      }
+    } catch (error) {
       console.error('execution_record load error:', error);
-      return;
-    }
-
-    const mapped = (data ?? []).map(mapRecord);
-    setRecords(mapped);
-
-    if (mapped.length > 0) {
-      setSelectedExecutionRecordId((prev) => {
-        const exists = mapped.some((item) => item.id === prev);
-        return exists ? prev : mapped[0].id;
-      });
-    } else {
-      setSelectedExecutionRecordId('');
     }
   };
 
   const loadEvidenceFiles = async () => {
-    if (!supabase) return;
+    if (!db || !storage) return;
 
-    const { data, error } = await supabase
-      .from('evidence_file')
-      .select('*')
-      .order('uploaded_at', { ascending: false });
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, 'evidence_file'), orderBy('uploaded_at', 'desc')),
+      );
 
-    if (error) {
-      console.error('evidence_file load error:', error);
-      return;
-    }
+      const mappedRows = await Promise.all(
+        snapshot.docs.map(async (d) => {
+          const row = d.data();
+          let thumbnailUrl = '';
 
-    const rows = data ?? [];
+          if (row.file_path && storage) {
+            try {
+              thumbnailUrl = await getDownloadURL(storageRef(storage, row.file_path));
+            } catch (error) {
+              console.error('evidence download url error:', error);
+            }
+          }
 
-    const mappedRows = await Promise.all(
-      rows.map(async (row) => {
-        let thumbnailUrl = '';
+          return {
+            id: d.id,
+            executionRecordId: row.execution_record_id,
+            fileName: row.file_name,
+            filePath: row.file_path,
+            uploadedBy: row.uploaded_by ?? null,
+            uploadedAt: row.uploaded_at,
+            thumbnailUrl,
+          } satisfies ExecutionEvidenceFile;
+        }),
+      );
 
-        if (row.file_path && supabase) {
-          const { data: signed } = await supabase.storage
-            .from('evidence-files')
-            .createSignedUrl(row.file_path, 60 * 60);
-
-          thumbnailUrl = signed?.signedUrl ?? '';
+      const grouped = mappedRows.reduce<Record<string, ExecutionEvidenceFile[]>>((acc, item) => {
+        if (!acc[item.executionRecordId]) {
+          acc[item.executionRecordId] = [];
         }
+        acc[item.executionRecordId].push(item);
+        return acc;
+      }, {});
 
-        return {
-          id: row.id,
-          executionRecordId: row.execution_record_id,
-          fileName: row.file_name,
-          filePath: row.file_path,
-          uploadedBy: row.uploaded_by ?? null,
-          uploadedAt: row.uploaded_at,
-          thumbnailUrl,
-        } satisfies ExecutionEvidenceFile;
-      }),
-    );
-
-    const grouped = mappedRows.reduce<Record<string, ExecutionEvidenceFile[]>>((acc, item) => {
-      if (!acc[item.executionRecordId]) {
-        acc[item.executionRecordId] = [];
-      }
-      acc[item.executionRecordId].push(item);
-      return acc;
-    }, {});
-
-    setEvidenceFilesByRecord(grouped);
+      setEvidenceFilesByRecord(grouped);
+    } catch (error) {
+      console.error('evidence_file load error:', error);
+    }
   };
 
   const loadSecuritySettings = async () => {
-    if (!supabase) return;
+    if (!db) return;
 
-    const { data, error } = await supabase
-      .from('security_setting')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(1);
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, 'security_setting'), orderBy('created_at', 'asc'), limit(1)),
+      );
 
-    if (error) {
-      console.error('security_setting load error:', error);
-      return;
-    }
-
-    const first = (data ?? [])[0];
-    if (!first) {
-      const { data: inserted, error: insertError } = await supabase
-        .from('security_setting')
-        .insert({
+      const first = snapshot.docs[0];
+      if (!first) {
+        const created = await addDoc(collection(db, 'security_setting'), {
           allowed_email_domain: defaultSecuritySettings.allowedEmailDomain,
           session_timeout_minutes: defaultSecuritySettings.sessionTimeoutMinutes,
           google_chat_alert_times: defaultSecuritySettings.googleChatAlertTimes,
-        })
-        .select('*')
-        .single();
-
-      if (insertError) {
-        console.error('security_setting insert error:', insertError);
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        });
+        void created;
+        setSecuritySettings(mapSecuritySettings({
+          allowed_email_domain: defaultSecuritySettings.allowedEmailDomain,
+          session_timeout_minutes: defaultSecuritySettings.sessionTimeoutMinutes,
+          google_chat_alert_times: defaultSecuritySettings.googleChatAlertTimes,
+        }));
         return;
       }
 
-      setSecuritySettings(mapSecuritySettings(inserted));
-      return;
+      setSecuritySettings(mapSecuritySettings(first.data()));
+    } catch (error) {
+      console.error('security_setting load error:', error);
     }
-
-    setSecuritySettings(mapSecuritySettings(first));
   };
 
   const reloadAll = async () => {
-    if (!supabase) {
+    if (!db) {
       setLoading(false);
       return;
     }
@@ -441,7 +465,8 @@ export function useSecurityActivityData() {
   };
 
   const syncExecutionRecords = async (master: ActivityMaster) => {
-    if (!supabase) return;
+    if (!db) return;
+    const fdb = db;
 
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 1;
@@ -450,34 +475,26 @@ export function useSecurityActivityData() {
     const scheduleDates = getScheduleDatesByFrequency(master.frequency, startYear, endYear);
     const scheduleDateSet = new Set(scheduleDates);
 
-    const { data: existingRows, error: existingLoadError } = await supabase
-      .from('execution_record')
-      .select('id, due_date, status, execution_note')
-      .eq('activity_master_id', master.id);
+    const existingSnapshot = await getDocs(
+      query(collection(db, 'execution_record'), where('activity_master_id', '==', master.id)),
+    );
 
-    if (existingLoadError) {
-      console.error('execution_record load error:', existingLoadError);
-      throw new Error(existingLoadError.message);
-    }
+    const existing = existingSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+    const existingIds = existing.map((row) => row.id as string);
 
-    const existing = existingRows ?? [];
-    const existingIds = existing.map((row) => row.id);
-
-    let evidenceRecordIdSet = new Set<string>();
+    const evidenceRecordIdSet = new Set<string>();
 
     if (existingIds.length > 0) {
-      const { data: evidenceRows, error: evidenceLoadError } = await supabase
-        .from('evidence_file')
-        .select('execution_record_id')
-        .in('execution_record_id', existingIds);
+      const evidenceSnapshots = await Promise.all(
+        chunk(existingIds).map((ids) =>
+          getDocs(
+            query(collection(fdb, 'evidence_file'), where('execution_record_id', 'in', ids)),
+          ),
+        ),
+      );
 
-      if (evidenceLoadError) {
-        console.error('evidence_file load error:', evidenceLoadError);
-        throw new Error(evidenceLoadError.message);
-      }
-
-      evidenceRecordIdSet = new Set(
-        (evidenceRows ?? []).map((row) => row.execution_record_id as string),
+      evidenceSnapshots.forEach((snap) =>
+        snap.docs.forEach((d) => evidenceRecordIdSet.add(d.data().execution_record_id as string)),
       );
     }
 
@@ -501,61 +518,48 @@ export function useSecurityActivityData() {
       }
     });
 
-    if (updatableIds.length > 0) {
-      const { error: updateError } = await supabase
-        .from('execution_record')
-        .update({
-          owner_department: master.ownerDepartment,
-          partner_department: master.partnerDepartment,
-          frequency_label: master.frequency,
-          title: master.name,
-          description: master.purpose,
-        })
-        .eq('activity_master_id', master.id)
-        .in('id', updatableIds);
+    const batch = writeBatch(fdb);
 
-      if (updateError) {
-        console.error('execution_record update error:', updateError);
-        throw new Error(updateError.message);
-      }
-    }
+    updatableIds.forEach((id) => {
+      batch.update(doc(fdb, 'execution_record', id), {
+        owner_department: master.ownerDepartment,
+        partner_department: master.partnerDepartment,
+        frequency_label: master.frequency,
+        title: master.name,
+        description: master.purpose,
+      });
+    });
 
-    if (removableIds.length > 0) {
-      const { error: deleteError } = await supabase
-        .from('execution_record')
-        .delete()
-        .eq('activity_master_id', master.id)
-        .in('id', removableIds);
+    removableIds.forEach((id) => {
+      batch.delete(doc(fdb, 'execution_record', id));
+    });
 
-      if (deleteError) {
-        console.error('execution_record cleanup delete error:', deleteError);
-        throw new Error(deleteError.message);
-      }
-    }
+    Array.from(scheduleDateSet).forEach((dueDate) => {
+      batch.set(doc(collection(fdb, 'execution_record')), {
+        activity_master_id: master.id,
+        owner_department: master.ownerDepartment,
+        partner_department: master.partnerDepartment,
+        frequency_label: master.frequency,
+        title: master.name,
+        description: master.purpose,
+        due_date: dueDate,
+        status: '예약',
+        evidence_required: true,
+        execution_note: '',
+        created_at: serverTimestamp(),
+      });
+    });
 
-    const payload = Array.from(scheduleDateSet).map((dueDate) => ({
-      activity_master_id: master.id,
-      owner_department: master.ownerDepartment,
-      partner_department: master.partnerDepartment,
-      frequency_label: master.frequency,
-      title: master.name,
-      description: master.purpose,
-      due_date: dueDate,
-      status: '예약',
-      evidence_required: true,
-      execution_note: '',
-    }));
-
-    const { error: insertError } = await supabase.from('execution_record').insert(payload);
-
-    if (insertError) {
-      console.error('execution_record insert error:', insertError);
-      throw new Error(insertError.message);
+    try {
+      await batch.commit();
+    } catch (error) {
+      console.error('execution_record sync error:', error);
+      throw error instanceof Error ? error : new Error('execution_record sync 실패');
     }
   };
 
   const saveSelectedMaster = async () => {
-    if (!supabase || !selectedMaster) return;
+    if (!db || !selectedMaster) return;
 
     const normalizedPartnerDepartment =
       selectedMaster.partnerDepartment && selectedMaster.partnerDepartment.trim() !== ''
@@ -574,45 +578,34 @@ export function useSecurityActivityData() {
 
     const isTemp = selectedMaster.id.startsWith('temp-');
 
-    if (isTemp) {
-      const { data, error } = await supabase
-        .from('activity_master')
-        .insert(payload)
-        .select('*')
-        .single();
+    try {
+      if (isTemp) {
+        const created = await addDoc(collection(db, 'activity_master'), {
+          ...payload,
+          created_at: serverTimestamp(),
+        });
 
-      if (error) {
-        console.error('activity_master insert error:', error);
-        throw new Error(error.message);
+        const mapped = mapMaster({ id: created.id, ...payload });
+        setMasters((prev) => prev.map((item) => (item.id === selectedMaster.id ? mapped : item)));
+        setSelectedMasterId(mapped.id);
+
+        await syncExecutionRecords(mapped);
+        await loadMasters();
+        await loadRecords();
+        return;
       }
 
-      const mapped = mapMaster(data);
-      setMasters((prev) => prev.map((item) => (item.id === selectedMaster.id ? mapped : item)));
-      setSelectedMasterId(mapped.id);
+      await updateDoc(doc(db, 'activity_master', selectedMaster.id), payload);
+
+      const mapped = mapMaster({ id: selectedMaster.id, ...payload });
 
       await syncExecutionRecords(mapped);
       await loadMasters();
       await loadRecords();
-      return;
+    } catch (error) {
+      console.error('activity_master save error:', error);
+      throw error instanceof Error ? error : new Error('activity_master 저장 실패');
     }
-
-    const { data, error } = await supabase
-      .from('activity_master')
-      .update(payload)
-      .eq('id', selectedMaster.id)
-      .select('*')
-      .single();
-
-    if (error) {
-      console.error('activity_master update error:', error);
-      throw new Error(error.message);
-    }
-
-    const mapped = mapMaster(data);
-
-    await syncExecutionRecords(mapped);
-    await loadMasters();
-    await loadRecords();
   };
 
   const deleteSelectedMaster = async () => {
@@ -631,69 +624,61 @@ export function useSecurityActivityData() {
       return;
     }
 
-    if (!supabase) {
-      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    if (!db) {
+      throw new Error('Firestore가 초기화되지 않았습니다.');
     }
+    const fdb = db;
+    const fstorage = storage;
 
     const relatedRecordIds = records
       .filter((item) => item.activityMasterId === deletingId)
       .map((item) => item.id);
 
-    if (relatedRecordIds.length > 0) {
-      const evidenceRows = relatedRecordIds.flatMap(
-        (recordId) => evidenceFilesByRecord[recordId] ?? [],
-      );
+    try {
+      if (relatedRecordIds.length > 0) {
+        const evidenceRows = relatedRecordIds.flatMap(
+          (recordId) => evidenceFilesByRecord[recordId] ?? [],
+        );
 
-      if (evidenceRows.length > 0) {
-        const filePaths = evidenceRows
-          .map((item) => item.filePath)
-          .filter((path): path is string => Boolean(path));
-
-        if (filePaths.length > 0) {
-          const { error: storageRemoveError } = await supabase.storage
-            .from('evidence-files')
-            .remove(filePaths);
-
-          if (storageRemoveError) {
-            console.error('storage remove error:', storageRemoveError);
-          }
+        if (evidenceRows.length > 0 && fstorage) {
+          await Promise.all(
+            evidenceRows
+              .map((item) => item.filePath)
+              .filter((path): path is string => Boolean(path))
+              .map(async (path) => {
+                try {
+                  await deleteObject(storageRef(fstorage, path));
+                } catch (error) {
+                  console.error('storage remove error:', error);
+                }
+              }),
+          );
         }
 
-        const { error: evidenceDeleteError } = await supabase
-          .from('evidence_file')
-          .delete()
-          .in('execution_record_id', relatedRecordIds);
+        // Delete evidence_file docs for the related execution records.
+        const evidenceSnapshots = await Promise.all(
+          chunk(relatedRecordIds).map((ids) =>
+            getDocs(
+              query(collection(fdb, 'evidence_file'), where('execution_record_id', 'in', ids)),
+            ),
+          ),
+        );
 
-        if (evidenceDeleteError) {
-          console.error('evidence_file delete error:', evidenceDeleteError);
-          throw new Error(evidenceDeleteError.message);
-        }
+        const deleteBatch = writeBatch(fdb);
+        evidenceSnapshots.forEach((snap) => snap.docs.forEach((d) => deleteBatch.delete(d.ref)));
+        relatedRecordIds.forEach((id) => deleteBatch.delete(doc(fdb, 'execution_record', id)));
+        await deleteBatch.commit();
       }
 
-      const { error: recordDeleteError } = await supabase
-        .from('execution_record')
-        .delete()
-        .eq('activity_master_id', deletingId);
+      await deleteDoc(doc(fdb, 'activity_master', deletingId));
 
-      if (recordDeleteError) {
-        console.error('execution_record delete error:', recordDeleteError);
-        throw new Error(recordDeleteError.message);
-      }
+      await loadMasters();
+      await loadRecords();
+      await loadEvidenceFiles();
+    } catch (error) {
+      console.error('activity_master delete error:', error);
+      throw error instanceof Error ? error : new Error('activity_master 삭제 실패');
     }
-
-    const { error: masterDeleteError } = await supabase
-      .from('activity_master')
-      .delete()
-      .eq('id', deletingId);
-
-    if (masterDeleteError) {
-      console.error('activity_master delete error:', masterDeleteError);
-      throw new Error(masterDeleteError.message);
-    }
-
-    await loadMasters();
-    await loadRecords();
-    await loadEvidenceFiles();
   };
 
   const setSelectedExecutionNote = (value: string) => {
@@ -705,212 +690,161 @@ export function useSecurityActivityData() {
   };
 
   const updateExecutionNote = async (executionRecordId: string, executionNote: string) => {
-    if (!supabase) {
-      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    if (!db) {
+      throw new Error('Firestore가 초기화되지 않았습니다.');
     }
 
-    const { error } = await supabase
-      .from('execution_record')
-      .update({ execution_note: executionNote })
-      .eq('id', executionRecordId);
-
-    if (error) {
+    try {
+      await updateDoc(doc(db, 'execution_record', executionRecordId), {
+        execution_note: executionNote,
+      });
+    } catch (error) {
       console.error('execution_record note update error:', error);
-      throw new Error(error.message);
+      throw error instanceof Error ? error : new Error('실행 기록 메모 저장 실패');
     }
 
     await loadRecords();
   };
 
   const uploadEvidenceFile = async (executionRecordId: string, file: File, userEmail: string) => {
-    if (!supabase) {
-      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
-    }
-    const supabaseClient = supabase;
-    const {
-      data: { session: initialSession },
-      error: sessionError,
-    } = await supabaseClient.auth.getSession();
-
-    if (sessionError) {
-      console.error('auth session load error:', sessionError);
-      throw new Error('로그인 세션을 확인하지 못했습니다. 다시 로그인해 주세요.');
+    if (!db || !storage) {
+      throw new Error('Firebase가 초기화되지 않았습니다.');
     }
 
-    let session = initialSession;
-    if (!session) {
-      const { data: refreshed, error: refreshError } = await supabaseClient.auth.refreshSession();
-      if (refreshError) {
-        console.error('auth refresh session error:', refreshError);
-      }
-      session = refreshed.session ?? null;
-    }
-
-    if (!session?.user?.id) {
-      await supabaseClient.auth.signOut();
+    const currentUser = auth?.currentUser ?? null;
+    if (!currentUser) {
       throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.');
     }
 
-    const sessionEmail = session.user.email ?? userEmail ?? '';
-    const sessionUserId = session.user.id;
+    const sessionEmail = currentUser.email ?? userEmail ?? '';
 
     const sanitizedFileName = file.name.replace(/[^\w.\-가-힣]/g, '_');
     const filePath = `evidence/${executionRecordId}/${Date.now()}-${sanitizedFileName}`;
 
-    const { error: uploadError } = await supabaseClient.storage
-      .from('evidence-files')
-      .upload(filePath, file, { upsert: false });
+    const fileRef = storageRef(storage, filePath);
 
-    if (uploadError) {
-      console.error('storage upload error:', uploadError);
-      throw new Error(`Storage 업로드 실패: ${uploadError.message}`);
+    try {
+      await uploadBytes(fileRef, file);
+    } catch (error) {
+      console.error('storage upload error:', error);
+      throw new Error(
+        `Storage 업로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+      );
     }
 
-    let insertedRow: any = null;
-    let insertError: any = null;
-
-    const firstInsert = await supabaseClient
-      .from('evidence_file')
-      .insert({
+    try {
+      await addDoc(collection(db, 'evidence_file'), {
         execution_record_id: executionRecordId,
         file_name: file.name,
         file_path: filePath,
         uploaded_by: sessionEmail,
-      })
-      .select('*')
-      .single();
-
-    insertedRow = firstInsert.data;
-    insertError = firstInsert.error;
-
-    if (insertError && String(insertError.message ?? '').includes('row-level security')) {
-      const secondInsert = await supabaseClient
-        .from('evidence_file')
-        .insert({
-          execution_record_id: executionRecordId,
-          file_name: file.name,
-          file_path: filePath,
-          uploaded_by: sessionUserId,
-        })
-        .select('*')
-        .single();
-
-      insertedRow = secondInsert.data;
-      insertError = secondInsert.error;
-    }
-
-    if (insertError) {
-      console.error('evidence_file insert error:', insertError);
-      const { error: rollbackError } = await supabaseClient.storage
-        .from('evidence-files')
-        .remove([filePath]);
-      if (rollbackError) {
+        uploaded_at: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('evidence_file insert error:', error);
+      try {
+        await deleteObject(fileRef);
+      } catch (rollbackError) {
         console.error('storage rollback remove error:', rollbackError);
       }
-
-      if (String(insertError.message ?? '').includes('row-level security')) {
-        await supabaseClient.auth.signOut();
-        throw new Error('로그인 세션이 만료되었거나 권한이 없습니다. 다시 로그인 후 시도해 주세요.');
-      }
-      throw new Error(`evidence_file 저장 실패: ${insertError.message}`);
+      throw new Error(
+        `evidence_file 저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+      );
     }
 
-    if (insertedRow) {
-      const { data: evidenceRows, error: evidenceLoadError } = await supabaseClient
-        .from('evidence_file')
-        .select('*')
-        .eq('execution_record_id', executionRecordId)
-        .order('uploaded_at', { ascending: false });
+    // Refresh evidence files for the affected record immediately, then a full
+    // refresh for cross-record consistency.
+    try {
+      const recordSnapshot = await getDocs(
+        query(
+          collection(db, 'evidence_file'),
+          where('execution_record_id', '==', executionRecordId),
+          orderBy('uploaded_at', 'desc'),
+        ),
+      );
 
-      if (!evidenceLoadError) {
-        const mappedRows = await Promise.all(
-          (evidenceRows ?? []).map(async (row) => {
-            let thumbnailUrl = '';
+      const mappedRows = await Promise.all(
+        recordSnapshot.docs.map(async (d) => {
+          const row = d.data();
+          let thumbnailUrl = '';
 
-            if (row.file_path) {
-              const { data: signed } = await supabaseClient.storage
-                .from('evidence-files')
-                .createSignedUrl(row.file_path, 60 * 60);
-              thumbnailUrl = signed?.signedUrl ?? '';
+          if (row.file_path && storage) {
+            try {
+              thumbnailUrl = await getDownloadURL(storageRef(storage, row.file_path));
+            } catch (error) {
+              console.error('evidence download url error:', error);
             }
+          }
 
-            return {
-              id: row.id,
-              executionRecordId: row.execution_record_id,
-              fileName: row.file_name,
-              filePath: row.file_path,
-              uploadedBy: row.uploaded_by ?? null,
-              uploadedAt: row.uploaded_at,
-              thumbnailUrl,
-            } satisfies ExecutionEvidenceFile;
-          }),
-        );
+          return {
+            id: d.id,
+            executionRecordId: row.execution_record_id,
+            fileName: row.file_name,
+            filePath: row.file_path,
+            uploadedBy: row.uploaded_by ?? null,
+            uploadedAt: row.uploaded_at,
+            thumbnailUrl,
+          } satisfies ExecutionEvidenceFile;
+        }),
+      );
 
-        setEvidenceFilesByRecord((prev) => ({
-          ...prev,
-          [executionRecordId]: mappedRows,
-        }));
-      } else {
-        console.error('evidence_file immediate load error:', evidenceLoadError);
-      }
+      setEvidenceFilesByRecord((prev) => ({
+        ...prev,
+        [executionRecordId]: mappedRows,
+      }));
+    } catch (error) {
+      console.error('evidence_file immediate load error:', error);
     }
 
-    // Keep full refresh for cross-record consistency.
     await loadEvidenceFiles();
   };
 
   const markExecutionRecordComplete = async (executionRecordId: string) => {
-    if (!supabase) {
-      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    if (!db) {
+      throw new Error('Firestore가 초기화되지 않았습니다.');
     }
 
-    const { error } = await supabase
-      .from('execution_record')
-      .update({ status: '완료' })
-      .eq('id', executionRecordId);
-
-    if (error) {
+    try {
+      await updateDoc(doc(db, 'execution_record', executionRecordId), { status: '완료' });
+    } catch (error) {
       console.error('execution_record complete error:', error);
-      throw new Error(error.message);
+      throw error instanceof Error ? error : new Error('실행 기록 완료 처리 실패');
     }
 
     await loadRecords();
   };
 
   const deleteEvidenceFile = async (evidenceFileId: string) => {
-    if (!supabase) {
-      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    if (!db || !storage) {
+      throw new Error('Firebase가 초기화되지 않았습니다.');
     }
 
-    const supabaseClient = supabase;
-    const { data: row, error: rowError } = await supabaseClient
-      .from('evidence_file')
-      .select('id, execution_record_id, file_path')
-      .eq('id', evidenceFileId)
-      .single();
+    let row: any = null;
 
-    if (rowError) {
-      console.error('evidence_file load for delete error:', rowError);
-      throw new Error(rowError.message);
+    try {
+      const snapshot = await getDoc(doc(db, 'evidence_file', evidenceFileId));
+      if (!snapshot.exists()) {
+        throw new Error('증빙 파일을 찾을 수 없습니다.');
+      }
+      row = { id: snapshot.id, ...snapshot.data() };
+    } catch (error) {
+      console.error('evidence_file load for delete error:', error);
+      throw error instanceof Error ? error : new Error('증빙 파일 조회 실패');
     }
 
-    if (row?.file_path) {
-      const { error: storageRemoveError } = await supabaseClient.storage
-        .from('evidence-files')
-        .remove([row.file_path]);
-      if (storageRemoveError) {
-        console.error('storage remove error:', storageRemoveError);
+    if (row?.file_path && storage) {
+      try {
+        await deleteObject(storageRef(storage, row.file_path));
+      } catch (error) {
+        console.error('storage remove error:', error);
       }
     }
 
-    const { error: deleteError } = await supabaseClient
-      .from('evidence_file')
-      .delete()
-      .eq('id', evidenceFileId);
-
-    if (deleteError) {
-      console.error('evidence_file delete error:', deleteError);
-      throw new Error(deleteError.message);
+    try {
+      await deleteDoc(doc(db, 'evidence_file', evidenceFileId));
+    } catch (error) {
+      console.error('evidence_file delete error:', error);
+      throw error instanceof Error ? error : new Error('증빙 파일 삭제 실패');
     }
 
     setEvidenceFilesByRecord((prev) => {
@@ -923,8 +857,8 @@ export function useSecurityActivityData() {
   };
 
   const saveSecuritySettings = async (next: SecuritySettings) => {
-    if (!supabase) {
-      throw new Error('Supabase 클라이언트가 초기화되지 않았습니다.');
+    if (!db) {
+      throw new Error('Firestore가 초기화되지 않았습니다.');
     }
 
     const payload = {
@@ -933,34 +867,28 @@ export function useSecurityActivityData() {
       google_chat_alert_times: next.googleChatAlertTimes,
     };
 
-    const { data: currentRows, error: currentError } = await supabase
-      .from('security_setting')
-      .select('id')
-      .order('created_at', { ascending: true })
-      .limit(1);
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, 'security_setting'), orderBy('created_at', 'asc'), limit(1)),
+      );
 
-    if (currentError) {
-      console.error('security_setting current load error:', currentError);
-      throw new Error(currentError.message);
-    }
+      const current = snapshot.docs[0];
 
-    const current = (currentRows ?? [])[0];
-
-    if (!current) {
-      const { error: insertError } = await supabase.from('security_setting').insert(payload);
-      if (insertError) {
-        console.error('security_setting insert error:', insertError);
-        throw new Error(insertError.message);
+      if (!current) {
+        await addDoc(collection(db, 'security_setting'), {
+          ...payload,
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        });
+      } else {
+        await updateDoc(current.ref, {
+          ...payload,
+          updated_at: serverTimestamp(),
+        });
       }
-    } else {
-      const { error: updateError } = await supabase
-        .from('security_setting')
-        .update(payload)
-        .eq('id', current.id);
-      if (updateError) {
-        console.error('security_setting update error:', updateError);
-        throw new Error(updateError.message);
-      }
+    } catch (error) {
+      console.error('security_setting save error:', error);
+      throw error instanceof Error ? error : new Error('보안 설정 저장 실패');
     }
 
     setSecuritySettings({
