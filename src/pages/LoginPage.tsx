@@ -83,6 +83,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   };
 
+  if (submitting) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#dfe4ec] px-4 py-7 sm:px-6 sm:py-10">
+        <div className="flex items-center gap-3 text-[13px] font-medium text-[#5f6f88]">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#c2cad8] border-t-[#000927]" />
+          로그인 처리 중…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#dfe4ec] px-4 py-7 sm:px-6 sm:py-10">
       <div className="w-full max-w-[430px] overflow-hidden rounded-[20px] border border-[#d9dee7] bg-white shadow-[0_10px_20px_rgba(15,23,42,0.07)]">
