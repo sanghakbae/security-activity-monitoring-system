@@ -144,14 +144,15 @@ function getScheduleDatesByFrequency(
 }
 
 const defaultSecuritySettings: SecuritySettings = {
-  allowedEmailDomain: 'muhayu.com',
+  allowedEmailDomain: '',
   sessionTimeoutMinutes: 60,
   googleChatAlertTimes: ['14:00', '19:00'],
 };
 
+// Empty result means "no domain restriction" — do not force a default domain.
 function normalizeAllowedEmailDomainsText(value: unknown): string {
   if (typeof value !== 'string') {
-    return defaultSecuritySettings.allowedEmailDomain;
+    return '';
   }
 
   const unique = Array.from(
@@ -162,10 +163,6 @@ function normalizeAllowedEmailDomainsText(value: unknown): string {
         .filter((item) => item !== ''),
     ),
   );
-
-  if (unique.length === 0) {
-    return defaultSecuritySettings.allowedEmailDomain;
-  }
 
   return unique.join(', ');
 }

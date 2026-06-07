@@ -66,8 +66,9 @@ https://sanghakbae.github.io/security-activity-monitoring-system/
 
 Firebase Authentication의 Google 로그인을 사용합니다.
 
-- Google 계정으로 로그인 (리디렉트 방식, `/auth/callback`)
-- 허용 도메인 기반 접근 제한 (클라이언트 검증)
+- Google 계정으로 로그인 (팝업 방식, `signInWithPopup`)
+- 이메일 허용목록(`VITE_ALLOWED_EMAILS`) 및 도메인 기반 접근 제한 (클라이언트 검증)
+- 두 제한 모두 비워두면 모든 Google 계정 허용
 - 설정된 세션 유지 시간 초과 시 로그아웃 처리
 - 개발/테스트용 mock auth 모드 지원
 
@@ -206,7 +207,10 @@ VITE_FIREBASE_APP_ID=your_app_id
 
 ```env
 VITE_AUTH_MODE=firebase
-VITE_ALLOWED_DOMAIN=muhayu.com
+# 비워두면 도메인 제한 없음. 도메인을 넣으면 해당 도메인만 허용.
+VITE_ALLOWED_DOMAIN=
+# 특정 이메일만 허용 (쉼표로 여러 개). 도메인 규칙보다 우선. 비우면 제한 없음.
+VITE_ALLOWED_EMAILS=
 ```
 
 `VITE_AUTH_MODE=mock`으로 설정하면 Firebase 로그인 없이 개발용 mock 계정으로
@@ -236,8 +240,10 @@ SDK 설정 값을 `.env`에 입력합니다(`.env.example` 참고).
 - Authentication > Sign-in method에서 **Google** 공급자를 활성화합니다.
 - Authentication > Settings > 승인된 도메인에 GitHub Pages 도메인
   (`sanghakbae.github.io`)과 로컬 개발 도메인(`localhost`)을 추가합니다.
-- 도메인 제한(`hd`)과 세션 유지 시간은 클라이언트(`src/auth/auth.ts`)에서
-  `security_setting` 값으로 검증합니다.
+- 로그인은 팝업(`signInWithPopup`) 방식입니다. 리디렉트 방식은 앱 도메인과
+  Firebase 인증 핸들러 도메인이 달라 서드파티 쿠키 문제로 실패할 수 있습니다.
+- 이메일 허용목록(`VITE_ALLOWED_EMAILS`), 도메인 제한, 세션 유지 시간은
+  클라이언트(`src/auth/auth.ts`)에서 로그인 후 검증합니다.
 
 ### 3. Firestore
 
@@ -322,6 +328,13 @@ VITE_FIREBASE_PROJECT_ID
 VITE_FIREBASE_STORAGE_BUCKET
 VITE_FIREBASE_MESSAGING_SENDER_ID
 VITE_FIREBASE_APP_ID
+```
+
+접근 제한을 라이브에도 적용하려면 아래 Secret도 등록합니다(선택).
+
+```text
+VITE_ALLOWED_EMAILS   # 예: 특정 이메일만 허용
+VITE_ALLOWED_DOMAIN   # 예: 특정 도메인만 허용
 ```
 
 GitHub 저장소에서 `Settings > Secrets and variables > Actions`에 위 값을

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { AuthState, signInWithGoogle, validateCurrentUser } from '@/auth/auth';
-import { ALLOWED_DOMAIN } from '@/lib/env';
+import { ALLOWED_DOMAIN, ALLOWED_EMAILS } from '@/lib/env';
 import { db } from '@/lib/firebase';
 
 type LoginPageProps = {
@@ -9,7 +9,18 @@ type LoginPageProps = {
 };
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const [allowedDomainText, setAllowedDomainText] = useState<string>(`'${ALLOWED_DOMAIN}'`);
+  const noRestrictionText = '모든 Google 계정';
+  // An exact-email allowlist (if configured) takes priority over the domain.
+  const initialAllowedText =
+    ALLOWED_EMAILS.length > 0
+      ? ALLOWED_EMAILS.join(', ')
+      : ALLOWED_DOMAIN
+        ? `'${ALLOWED_DOMAIN}'`
+        : noRestrictionText;
+  const [submitting, setSubmitting] = useState(false);
+  const [allowedDomainText, setAllowedDomainText] = useState<string>(
+    initialAllowedText,
+  );
 
   const formatAllowedDomainText = (value: string) => {
     const unique = Array.from(
@@ -22,13 +33,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     );
 
     if (unique.length === 0) {
-      return `'${ALLOWED_DOMAIN}'`;
+      return ALLOWED_DOMAIN ? `'${ALLOWED_DOMAIN}'` : noRestrictionText;
     }
 
     return unique.map((domain) => `'${domain}'`).join(', ');
   };
 
   useEffect(() => {
+    // An email allowlist overrides domain display — don't fetch/clobber it.
+    if (ALLOWED_EMAILS.length > 0) return;
+
     const loadAllowedDomain = async () => {
       if (!db) return;
 
@@ -50,13 +64,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   }, []);
 
   const handleLogin = async () => {
+    setSubmitting(true);
     try {
       await signInWithGoogle();
 
       const authState = await validateCurrentUser();
       onLogin(authState);
+      // On success the app navigates away; keep the spinner until then.
+      if (!authState.authenticated) {
+        setSubmitting(false);
+      }
     } catch (error) {
       console.error('signInWithGoogle error:', error);
+      setSubmitting(false);
       window.alert(
         error instanceof Error ? `로그인 오류: ${error.message}` : '로그인 중 오류가 발생했습니다.',
       );
@@ -90,12 +110,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <button
             type="button"
             onClick={handleLogin}
-            className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-[14px] bg-[#000927] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#081437] sm:mt-4 sm:py-2 sm:text-[12px]"
+            disabled={submitting}
+            className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-[14px] bg-[#000927] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#081437] disabled:cursor-not-allowed disabled:opacity-60 sm:mt-4 sm:py-2 sm:text-[12px]"
           >
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[12px] font-semibold leading-none text-[#1a2337] sm:h-7 sm:w-7 sm:text-[13px]">
               G
             </span>
-            <span>Google 계정으로 로그인</span>
+            <span>{submitting ? '로그인 처리 중…' : 'Google 계정으로 로그인'}</span>
           </button>
 
           <p className="mt-4 text-center text-[11px] text-[#a4aec0] sm:mt-5 sm:text-[12px]">

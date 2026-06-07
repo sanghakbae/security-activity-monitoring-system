@@ -1,5 +1,5 @@
 /**
- * Seed initial data into Firestore (mirrors supabase/migrations/001_initial_schema.sql).
+ * Seed initial default data into Firestore (5 sample security activities).
  *
  * Usage:
  *   1. npm install                       # installs firebase-admin (devDependency)

@@ -14,7 +14,20 @@ export const VITE_FIREBASE_APP_ID = readEnv('VITE_FIREBASE_APP_ID');
 export const AUTH_MODE: AuthMode =
   readEnv('VITE_AUTH_MODE', 'firebase') === 'mock' ? 'mock' : 'firebase';
 
-export const ALLOWED_DOMAIN = readEnv('VITE_ALLOWED_DOMAIN', 'muhayu.com');
+// Empty by default → no domain restriction (any Google account may sign in).
+// Set VITE_ALLOWED_DOMAIN or the security_setting record to restrict.
+export const ALLOWED_DOMAIN = readEnv('VITE_ALLOWED_DOMAIN', '');
+
+// Exact-email allowlist (comma-separated). When non-empty, ONLY these accounts
+// may sign in — takes priority over domain rules. Empty → no email restriction.
+export const ALLOWED_EMAILS: string[] = Array.from(
+  new Set(
+    readEnv('VITE_ALLOWED_EMAILS', '')
+      .split(',')
+      .map((item: string) => item.trim().toLowerCase())
+      .filter((item: string) => item !== ''),
+  ),
+);
 
 export const firebaseConfig = {
   apiKey: VITE_FIREBASE_API_KEY,

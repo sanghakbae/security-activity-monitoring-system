@@ -1,14 +1,13 @@
 import {
   GoogleAuthProvider,
-  getRedirectResult,
   onAuthStateChanged,
-  signInWithRedirect,
+  signInWithPopup,
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
 import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { ALLOWED_DOMAIN, AUTH_MODE } from '@/lib/env';
+import { ALLOWED_DOMAIN, ALLOWED_EMAILS, AUTH_MODE } from '@/lib/env';
 
 export type AuthState = {
   authenticated: boolean;
@@ -20,8 +19,9 @@ type RuntimeSecuritySettings = {
   sessionTimeoutMinutes: number;
 };
 
+// Empty allowedEmailDomains → no domain restriction (any Google account).
 const defaultRuntimeSecuritySettings: RuntimeSecuritySettings = {
-  allowedEmailDomains: [ALLOWED_DOMAIN],
+  allowedEmailDomains: ALLOWED_DOMAIN ? [ALLOWED_DOMAIN] : [],
   sessionTimeoutMinutes: 60,
 };
 
@@ -108,16 +108,24 @@ export async function signInWithGoogle() {
     throw new Error('Firebase Auth가 초기화되지 않았습니다.');
   }
 
-  const runtimeSettings = await loadRuntimeSecuritySettings();
-  const primaryDomain = runtimeSettings.allowedEmailDomains[0] ?? ALLOWED_DOMAIN;
+  // Use the env-configured domain only as an optional account-picker hint. The
+  // actual domain/email enforcement happens post-login in validateCurrentUser,
+  // so we avoid an unauthenticated Firestore read here (which the rules deny).
+  const primaryDomain = ALLOWED_DOMAIN;
 
   const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({
-    hd: primaryDomain,
-    prompt: 'select_account',
-  });
+  // Only hint a Workspace domain when one is configured; otherwise allow any
+  // Google account in the picker.
+  provider.setCustomParameters(
+    primaryDomain
+      ? { hd: primaryDomain, prompt: 'select_account' }
+      : { prompt: 'select_account' },
+  );
 
-  await signInWithRedirect(auth, provider);
+  // Popup avoids the third-party-cookie / storage-partitioning issues that
+  // break signInWithRedirect when the app origin (localhost / GitHub Pages)
+  // differs from the Firebase auth handler domain.
+  await signInWithPopup(auth, provider);
 }
 
 export async function signOut() {
@@ -136,7 +144,7 @@ export async function validateCurrentUser(): Promise<AuthState> {
   if (AUTH_MODE === 'mock') {
     return {
       authenticated: true,
-      email: `test@${ALLOWED_DOMAIN}`,
+      email: `test@${ALLOWED_DOMAIN || 'example.com'}`,
     };
   }
 
@@ -144,6 +152,8 @@ export async function validateCurrentUser(): Promise<AuthState> {
     return { authenticated: false, email: null };
   }
 
+  // Sign-in uses signInWithPopup, so on app load we simply resolve the
+  // persisted session via onAuthStateChanged.
   const user = await waitForAuthUser();
 
   if (!user?.email) {
@@ -155,9 +165,24 @@ export async function validateCurrentUser(): Promise<AuthState> {
 
   const email = user.email;
   const domain = email.split('@')[1]?.toLowerCase() ?? '';
+
+  // Exact-email allowlist takes priority. When set, only these accounts pass.
+  if (ALLOWED_EMAILS.length > 0 && !ALLOWED_EMAILS.includes(email.toLowerCase())) {
+    await signOut();
+
+    return {
+      authenticated: false,
+      email: null,
+    };
+  }
+
   const runtimeSettings = await loadRuntimeSecuritySettings();
 
-  if (!runtimeSettings.allowedEmailDomains.includes(domain)) {
+  // Empty allowedEmailDomains means no restriction — allow any domain.
+  if (
+    runtimeSettings.allowedEmailDomains.length > 0 &&
+    !runtimeSettings.allowedEmailDomains.includes(domain)
+  ) {
     await signOut();
 
     return {
@@ -193,13 +218,6 @@ export async function validateCurrentUser(): Promise<AuthState> {
 }
 
 export async function handleAuthCallback(): Promise<AuthState> {
-  if (auth) {
-    try {
-      await getRedirectResult(auth);
-    } catch (error) {
-      console.error('getRedirectResult error:', error);
-    }
-  }
-
+  // validateCurrentUser() now resolves the pending redirect itself.
   return validateCurrentUser();
 }
